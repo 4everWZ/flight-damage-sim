@@ -188,8 +188,16 @@ class Viewer:
         elevation=math.degrees(math.atan2(-self.aim[2],math.hypot(*self.aim[:2])))
         self.aim_axis.set(xlim=(-180,180),ylim=(-30,45),xlabel='Aim heading (deg)',ylabel='Elevation (deg)')
         self.aim_axis.grid(alpha=.3)
-        self.aim_axis.scatter([heading],[elevation],s=70,marker='+',color='#b64335')
-        self.aim_axis.set_title('Aim air-path heading / elevation · actual surfaces',fontsize=10,color='white')
+        self.aim_axis.scatter([heading],[elevation],s=70,marker='+',color='#b64335',label='aim')
+        velocity=[v-w for v,w in zip(s['velocity'],s['wind'])]
+        self.actual_path=None
+        if sum(v*v for v in velocity)>1e-12:
+            actual_heading=math.degrees(math.atan2(velocity[1],velocity[0]))
+            actual_elevation=math.degrees(math.atan2(-velocity[2],math.hypot(*velocity[:2])))
+            self.actual_path=self.aim_axis.scatter([actual_heading],[actual_elevation],s=32,color='#276788',
+                                                 label=f'actual {actual_heading:+.1f}° / {actual_elevation:+.1f}°')
+        self.aim_axis.legend(loc='upper left',fontsize=8)
+        self.aim_axis.set_title('Aim (+) and actual air path (o) · heading / elevation',fontsize=10,color='white')
         self.structure.clear()
         edges=s['edges']
         self.structure.barh(range(len(edges)),[min(e['ultimate_utilization'],3) for e in edges],color=['#b64335' if e['failed'] else '#426e79' for e in edges])
@@ -376,6 +384,11 @@ def smoke(core,plt):
         core.command('governor on')
     delivery_checks(viewer)
     viewer.draw()
+    # Display-only direction is derived from core air-relative velocity, never attitude.
+    v=[a-b for a,b in zip(core.state['velocity'],core.state['wind'])]
+    point=viewer.actual_path.get_offsets()[0]
+    assert abs(point[0]-math.degrees(math.atan2(v[1],v[0])))<1e-9
+    assert abs(point[1]-math.degrees(math.atan2(-v[2],math.hypot(*v[:2]))))<1e-9
     viewer.fig.text(.99,.97,'OFFLINE AGG INPUT TEST · HUMAN GUI NOT VERIFIED',ha='right',color='white',fontsize=9)
     output=ROOT/'results'/('viewer-smoke'+('-legacy' if core.state['propeller_model']=='legacy' else '')+'.png')
     output.parent.mkdir(exist_ok=True)
