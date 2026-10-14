@@ -95,11 +95,15 @@ struct Engine {
   Vec position{};
   double max_power = 0, rated_rpm = 0, prop_radius = 0, rotor_inertia = 0,
          ct = 0, cq = 0, advance_loss = 0, altitude_scale = 0, response = 0;
-  double acceleration = 0;
+  double acceleration = 0, aero_torque = 0;
   double rpm = 0, throttle_state = 0, power_fraction = 1, prop_fraction = 1,
          thrust = 0, torque = 0, shaft_power = 0;
   bool running = true; // initial implementation: fixed-pitch propeller
 };
+// Authoritative component step. SI: density kg/m^3, altitude/airspeed m and
+// m/s.
+void advance_propulsion(Engine &, double density, double altitude,
+                        double axial_airspeed, double throttle, double dt);
 struct Definition {
   std::vector<AeroCell> cells;
   std::vector<ControlChain> chains;

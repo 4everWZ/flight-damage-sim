@@ -360,24 +360,22 @@ void Simulation::update_controls(const PilotIntent &p) {
         clamp(c.filtered * effort - c.deflection, -max_step, max_step);
   }
 }
-void Simulation::update_engine(const PilotIntent &p) {
-  auto &e = def.engine;
-  double v = std::max(
-      body.attitude.conjugate().rotate(body.velocity - wind_world).x, 0.);
-  density = 1.225 * std::exp(body.position.z / 8500.);
-  e.throttle_state += (clamp(p.throttle, 0, 1) - e.throttle_state) *
+void advance_propulsion(Engine &e, double density, double altitude, double v,
+                        double throttle, double dt) {
+  e.throttle_state += (clamp(throttle, 0, 1) - e.throttle_state) *
                       (1 - std::exp(-dt / e.response));
   double omega = std::max(e.rpm * 2 * pi / 60, 0.);
   double rpm_factor = clamp(e.rpm / e.rated_rpm, 0, 1.15);
-  e.shaft_power =
-      e.running ? e.max_power * e.throttle_state * e.power_fraction *
-                      std::exp(body.position.z / e.altitude_scale) * rpm_factor
-                : 0;
+  e.shaft_power = e.running
+                      ? e.max_power * e.throttle_state * e.power_fraction *
+                            std::exp(-altitude / e.altitude_scale) * rpm_factor
+                      : 0;
   double n = e.rpm / 60, diameter = 2 * e.prop_radius,
          J = v / std::max(n * diameter, 1.);
   double prop_q =
       e.cq * density * n * n * std::pow(diameter, 5) * e.prop_fraction;
   double engine_q = e.shaft_power / std::max(omega, 20.);
+  e.aero_torque = prop_q;
   e.acceleration = (engine_q - prop_q) / e.rotor_inertia;
   omega = std::max(0., omega + e.acceleration * dt);
   e.rpm = omega * 60 / (2 * pi);
@@ -385,7 +383,15 @@ void Simulation::update_engine(const PilotIntent &p) {
   J = v / std::max(n * diameter, 1.);
   e.thrust = e.ct * density * n * n * std::pow(diameter, 4) *
              (1 - e.advance_loss * J) * e.prop_fraction;
-  e.torque = e.shaft_power / std::max(omega, 20.);
+  // Apply the same shaft torque to rotor and mount; post-step RPM must not
+  // change the reaction pair.
+  e.torque = engine_q;
+}
+void Simulation::update_engine(const PilotIntent &p) {
+  double v = std::max(
+      body.attitude.conjugate().rotate(body.velocity - wind_world).x, 0.);
+  density = 1.225 * std::exp(body.position.z / 8500.);
+  advance_propulsion(def.engine, density, -body.position.z, v, p.throttle, dt);
 }
 Wrench Simulation::evaluate(const Body &b, bool store) {
   double rho = 1.225 * std::exp(b.position.z / 8500.);

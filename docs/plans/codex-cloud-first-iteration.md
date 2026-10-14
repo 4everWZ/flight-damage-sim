@@ -16,6 +16,7 @@ The repository-local APEX skills preserve source content/license and do not modi
 make -j2
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
+python3 tools/propulsion_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
@@ -24,7 +25,7 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 `build/flight-run data/validation.airframe <scenario> results/<prefix> [hz=120] [seconds=10] [controller=flightpath|flightpath-p|legacy|off] [bank_deg=40]` runs a single scenario; available names are defined in `src/runner.cpp`. The experimental 240 Hz option exists for convergence. Live mode is fixed at 120 Hz. Inputs and damage commands are applied at explicit tick boundaries; viewer rendering does not alter dt.
 
-`results/summary.json` and `results/instructor-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png` and `instructor-comparison.png` are scientific plots; `viewer-smoke.png` is an Agg rendering of live state. These generated results stay untracked.
+`results/summary.json`, `results/instructor-summary.json` and `results/propulsion-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png` and `instructor-comparison.png` are scientific plots; `viewer-smoke.png` is an Agg rendering of live state. These generated results stay untracked.
 
 ## Original acceptance mapping
 
@@ -52,7 +53,7 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Next useful experiments
 
-1. Resolve propulsion/energy margin before promising sustained climb or tighter level turns. Compare fixed-pitch advance tables and a constant-speed governor on the same core. The current 8° climb is not fully trackable, and 50°/60° turn requests saturate pitch. Preserve keyboard authority and report actual rate/path error.
+1. Resolve the measured propulsion model gaps before promising sustained climb or tighter level turns. The authoritative component bench repaired a ~33.7 N m transient shaft reaction mismatch but found zero stopped-prop drag, no windmill startup and speed-independent fixed-pitch load. Compare signed CT/CQ versus advance ratio/blade pitch or explicit blade elements, then a governor that actuates pitch; do not lock RPM or add a cosmetic drag term. The current 8° climb is not fully trackable, and 50°/60° turn requests saturate pitch. Preserve keyboard authority and report actual rate/path error.
 2. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.
 3. Extend material mass bookkeeping and spanwise graph geometry/load mapping, then test large skin loss, critical spar hits and detached-piece aero. Separation momentum is checked, but local material removal does not yet update component mass. Current generalized graph statics are not calibrated local beam stresses.
 4. Extend damaged range/friction/lag/hinge and saturation cases, and speed sweeps. Re-run impossible trim through actual available actuators rather than manufacturing equilibrium.
@@ -60,4 +61,4 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Blockers
 
-No core build/test blocker. The previous revision had no remote Actions checks; the added workflow must be observed on the pushed head. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.
+No core build/test blocker. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.

@@ -96,11 +96,21 @@ A disconnected elevator still loses ~247 m by 10 s and reaches the reference gro
 
 The broader hypothesis that every turn has less minimum height loss **failed**. In a 60 s continuously rotating horizontal aim (0.08 rad/s), legacy climbs ~13.87 m, while new PI initially descends ~8.10 m and finishes ~5.05 m down. New flight-path error RMS after 20 s is ~0.068° versus ~0.218° legacy, with heading lag ~13.19° versus ~29.61°. This supports improved direction/path tracking, not universal altitude preservation. The failed hypothesis stays in generated `instructor-summary.json`; original requirements were not rewritten to make it pass.
 
+## Follow-up propulsion bench
+
+The first experiment after the mechanics/Instructor iteration isolates `advance_propulsion`, the same authoritative C++ component called by flight. It drives controlled axial airspeeds 0/40/70/100/140 m/s, powered spin-up, shutdown and stopped/removed prop cases at 120/240 Hz. These are component benches, not constrained aircraft maneuvers or a second Python model.
+
+It found a shaft-reaction mismatch during spin-up: rotor acceleration used engine torque computed before the RPM step, while the fuselage reaction was recomputed from power divided by post-step RPM. At 600 initial RPM, mismatch reached ~33.72 N m. Applying the same shaft torque to rotor and mount repairs the reaction pair; measured maximum error is ~6.1e-10 N m. This is an axial reaction consistency check, not full multi-axis gyroscopic/rotor-body energy validation.
+
+Powered useful thrust power stays below shaft power in the sampled envelope (maximum useful ratio ~0.411); steady RPM differs ~0.0018 between 120/240 Hz. These bounds do **not** validate the aerodynamic propeller model. Three substantive hypotheses failed: a stopped intact prop at 80 m/s has zero drag, wind cannot start windmilling from rest, and fixed-pitch shaft load is unchanged across the airspeed sweep. At shutdown from rated RPM, the model decays to ~189 RPM after 30 s with ~617 N drag; this is rotor coasting with an extrapolated thrust curve, not a validated windmilling equilibrium. Identical RPM across speeds is an artifact of constant CQ, not an implemented governor.
+
+`python3 tools/propulsion_experiments.py` preserves these failed hypotheses in `propulsion-summary.json` alongside implementation consistency predicates. No arbitrary drag correction or RPM lock was added to make them pass. The next discriminating model experiment is signed CT/CQ as a function of advance ratio and blade pitch, or explicit blade elements, including zero-RPM drag and wind-driven torque. Test that boundary before adding a governor that actuates blade pitch through finite range/rate limits. Constant-speed operation remains unimplemented.
+
 ## Reproduction and automation
 
 `make test` runs analytic/core and independent mechanics regressions. `python3 tools/experiments.py` covers the existing core slice; `python3 tools/instructor_experiments.py` produces fresh controller comparisons and failed hypotheses. `python3 tools/viewer.py --smoke` now also tests mode selection, reset persistence and integrator freezing through the actual adapter. `python3 tools/viewer.py --controller legacy` or `--controller off` launches comparisons locally; M cycles modes. No GUI handling claim is justified by these automatic tests.
 
-The first commit had no Actions runs/status checks. A minimal repository workflow now builds these same tests, runs both experiment entrypoints and the Agg viewer. Remote completion must be checked after push; local passes are not a remote-CI result. Focused ASan/UBSan mechanics review also passes in Cloud.
+The first commit had no Actions runs/status checks. A minimal repository workflow builds these same tests, runs core/Instructor/propulsion experiment entrypoints and the Agg viewer. The second-iteration remote run passed all build, experiment and render steps; each subsequent pushed head must be checked separately. Local passes are not a remote-CI result. Focused ASan/UBSan mechanics review also passes in Cloud.
 
 ## How decisions change
 
