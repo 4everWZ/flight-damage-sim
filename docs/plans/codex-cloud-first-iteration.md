@@ -6,7 +6,7 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-Two tested core iterations and a Matplotlib engineering viewer are implemented on `feature/headless-core-harness`. Work stays within this repository. A temporary remote-write pause was explicitly lifted after the parent confirmed the earlier cancellation was a platform bug. Main contains the original design checkpoint; development must remain on this feature branch with a draft PR and no auto-merge.
+The core/Instructor and signed-propulsion iterations, with a Matplotlib engineering viewer, are implemented on `feature/headless-core-harness`. Work stays within this repository. A temporary remote-write pause was explicitly lifted after the parent confirmed the earlier cancellation was a platform bug. Main contains the original design checkpoint; development must remain on this feature branch with a draft PR and no auto-merge.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
@@ -17,15 +17,16 @@ make -j2
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/propulsion_experiments.py
+python3 tools/rotor_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
 
-The headless path uses only GCC supporting C++20, GNU make and Python's standard library. The optional viewer/plots use Matplotlib (`python3 -m pip install -r requirements-viewer.txt` in a local isolated environment if absent). On a machine with a desktop backend, `python3 tools/viewer.py` opens the live engineering view. Click heading/elevation to set aim; arrows control pitch/roll, Q/E yaw, W/S throttle. F2–F6 inject cell/link/spar/engine damage. Space pauses, R resets while preserving controller choice, and M cycles new/legacy/off. `--controller legacy` or `--controller off` selects a startup comparison; these are automatic-input/transport tests, not human flight-feel validation.
+The headless path uses only GCC supporting C++20, GNU make and Python's standard library. The optional viewer/plots use Matplotlib (`python3 -m pip install -r requirements-viewer.txt` in a local isolated environment if absent). On a machine with a desktop backend, `python3 tools/viewer.py` opens the live engineering view. Click heading/elevation to set aim; arrows control pitch/roll, Q/E yaw, W/S throttle. F2–F7 inject cell/link/spar/engine/pitch-jam damage. G toggles the governor and PgUp/PgDn adjust requested shaft RPM. Space pauses, R resets while preserving controller/governor choice, and M cycles new/legacy/off. The viewer defaults to `validation-bem.airframe`; `--airframe validation.airframe` selects the retained legacy propulsion variant. `--controller legacy` or `--controller off` selects a guidance comparison on either variant; these are automatic-input/transport tests, not human flight-feel validation.
 
 `build/flight-run data/validation.airframe <scenario> results/<prefix> [hz=120] [seconds=10] [controller=flightpath|flightpath-p|legacy|off] [bank_deg=40]` runs a single scenario; available names are defined in `src/runner.cpp`. The experimental 240 Hz option exists for convergence. Live mode is fixed at 120 Hz. Inputs and damage commands are applied at explicit tick boundaries; viewer rendering does not alter dt.
 
-`results/summary.json`, `results/instructor-summary.json` and `results/propulsion-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png` and `instructor-comparison.png` are scientific plots; `viewer-smoke.png` is an Agg rendering of live state. These generated results stay untracked.
+`results/summary.json`, `results/instructor-summary.json` and `results/propulsion-summary.json` and `results/rotor-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png`, `instructor-comparison.png` and `rotor-governor.png` are scientific plots; `viewer-smoke.png` is an Agg rendering of live state. These generated results stay untracked.
 
 ## Original acceptance mapping
 
@@ -36,9 +37,9 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 | TEST-FM-001 trim | Tested | Elastic equilibrium and force/moment residual; no historical validation |
 | TEST-FM-002 elevator pull | Tested first fixture | AoA/G/energy telemetry; normal 70 m/s pull only ~1.76 G, high-speed entry reaches ~4.84 G; not a full envelope |
 | TEST-FM-003 roll | Tested first speed | Intact/damaged roll response at 70 m/s; speed sweep pending |
-| TEST-CTRL-001 90° aim | Tested basic guidance | New mode ~89.99° velocity heading at 30 s, transient drop ~18.6 m; off/legacy/P-only and damaged comparisons retained |
+| TEST-CTRL-001 90° aim | Tested basic guidance | Legacy prop variant: ~89.99° heading, ~18.6 m transient drop; signed prop: ~89.919°, ~17.074 m drop. Guidance comparisons retained |
 | TEST-CTRL-002/003 override/release | Implemented and tested | Independent ownership, configurable handoff initial state, PI freeze and release; live adapter smoke |
-| §19–22 engine/prop/trim | Partial, measured | Fixed-pitch shaft/RPM/thrust/torque/slipstream and three trim axes; constant-speed prop, feathering and richer damage pending |
+| §19–22 engine/prop/trim | Partial, implemented and measured | Signed blade loads/induction, stopped drag/wind startup, coupled rotor inertia/energy/gyro, finite pitch governor/jam/travel and three trim axes. Legacy counterexamples retained. Calibrated data, feathering, richer damage/engine model pending |
 | TEST-DMG-001 aero loss | Implemented and tested | Exactly 8/32 left outer-wing cells; force/moment and flight response, Instructor compensation |
 | TEST-DMG-002 control damage | Implemented and tested disconnect | Reduced actual roll response; no Instructor bypass. Partial range/lag/friction/hinge coverage pending |
 | TEST-DMG-003 spar weakening | Implemented reduced graph and tested | Low-load bench/flight survival, redistribution, delayed coupled high-load failure; material calibration pending |
@@ -53,7 +54,7 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Next useful experiments
 
-1. Resolve the measured propulsion model gaps before promising sustained climb or tighter level turns. The authoritative component bench repaired a ~33.7 N m transient shaft reaction mismatch but found zero stopped-prop drag, no windmill startup and speed-independent fixed-pitch load. Compare signed CT/CQ versus advance ratio/blade pitch or explicit blade elements, then a governor that actuates pitch; do not lock RPM or add a cosmetic drag term. The current 8° climb is not fully trackable, and 50°/60° turn requests saturate pitch. Preserve keyboard authority and report actual rate/path error.
+1. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
 2. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.
 3. Extend material mass bookkeeping and spanwise graph geometry/load mapping, then test large skin loss, critical spar hits and detached-piece aero. Separation momentum is checked, but local material removal does not yet update component mass. Current generalized graph statics are not calibrated local beam stresses.
 4. Extend damaged range/friction/lag/hinge and saturation cases, and speed sweeps. Re-run impossible trim through actual available actuators rather than manufacturing equilibrium.

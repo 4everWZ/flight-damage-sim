@@ -20,6 +20,7 @@ jobs:
           python3 tools/experiments.py
           python3 tools/instructor_experiments.py
           python3 tools/propulsion_experiments.py
+          python3 tools/rotor_experiments.py
       - name: Exercise live input and render transport
         run: |
           python3 -m pip install -r requirements-viewer.txt

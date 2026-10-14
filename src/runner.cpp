@@ -47,6 +47,20 @@ void row(std::ostream &out, const Simulation &s) {
     out << ',' << bias;
   for (bool paused : s.instructor.integral_paused)
     out << ',' << paused;
+  out << ',' << s.def.engine.pitch << ',' << s.def.engine.target_rpm << ','
+      << s.def.engine.governor_saturated << ',' << s.def.engine.shaft_power
+      << ',' << s.def.engine.aero_torque << ','
+      << s.def.engine.induced_velocity;
+  out << ',' << (s.def.engine.model == PropellerModel::BladeElement) << ','
+      << mechanical_energy(s.body, s.mass, s.def.engine) << ','
+      << s.rotor_step.engine_work << ',' << s.rotor_step.external_work << ','
+      << s.rotor_step.prop_loss;
+  out << ',' << s.rotor_step.impulse_world.x << ','
+      << s.rotor_step.impulse_world.y << ',' << s.rotor_step.impulse_world.z;
+  Vec h = total_angular_momentum(s.body, s.mass, s.def.engine);
+  out << ',' << h.x << ',' << h.y << ',' << h.z;
+  out << ',' << s.def.engine.tip_mach << ',' << s.def.engine.induction_residual
+      << ',' << s.def.engine.induction_converged;
   out << '\n';
 }
 void debug(const Simulation &s, const std::string &prefix) {
@@ -159,7 +173,7 @@ int main(int argc, char **argv) {
       return 0;
     }
     if (trim.residual > 1e-6)
-      std::cout << "entry_equilibrium=false (high-speed transient; fixed-pitch "
+      std::cout << "entry_equilibrium=false (high-speed transient; current "
                    "propulsion cannot sustain this speed)\n";
     std::ofstream out(prefix + ".csv");
     if (!out)
@@ -172,7 +186,11 @@ int main(int argc, char **argv) {
            "path_error,desired_p,desired_q,desired_r,roll_saturated,pitch_"
            "saturated,yaw_saturated,air_heading,beta,roll_bias,pitch_bias,yaw_"
            "bias,roll_integral_paused,pitch_integral_paused,yaw_integral_"
-           "paused\n";
+           "paused,prop_pitch,target_rpm,governor_saturated,shaft_power,aero_"
+           "prop_torque,induced,rotor_ledger_valid,mechanical_energy,engine_"
+           "work,external_work,"
+           "prop_loss,angular_impulse_x,angular_impulse_y,angular_impulse_z,Hx,"
+           "Hy,Hz,prop_tip_mach,induction_residual,induction_converged\n";
     bool damaged = false;
     p.mouse = scenario == "mouse" || scenario == "mixed" ||
               scenario == "compensate" || scenario == "weakened_pull" ||

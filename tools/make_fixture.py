@@ -55,4 +55,20 @@ for i in range(8):
     rows.append(f'cell {id_} 5 3 1 -4.3 0 {-0.2-(i+.5)*.15:g} .15 .8 .15 0 1 .8 fin')
     id_ += 1
 (root/'data'/'validation.airframe').write_text('\n'.join(rows)+'\n')
+# The same airframe with a new propulsion definition; base legacy fixture remains a comparison.
+prop=['# Synthetic blade-element propulsion variant; locked body inertia includes rotor inertia.',
+      'propeller blade_element 2 12 8 22 8 55 10 400 .8', 'governor 1 1600 18 8',
+      'blade .25 .24 25','blade .45 .22 12','blade .65 .20 5','blade .85 .16 -4','blade 1 .12 -8']
+for deg in range(-180,181,5):
+    angle=math.radians(deg)
+    plate=math.sin(2*angle)
+    if abs(deg)<=15:cl=5.7*angle
+    elif abs(deg)<30:
+        t=(abs(deg)-15)/15
+        cl=math.copysign((1-t)*5.7*math.radians(15)+t*abs(plate),deg)
+    else:cl=plate
+    cd=.012+.03*cl*cl+min(1,max(0,(abs(deg)-15)/15))*1.5*math.sin(angle)**2
+    prop.append(f'prop_polar {deg} {cl:.10f} {cd:.10f}')
+bem_rows=[row.replace('engine 850000 2600','engine 500000 1600') for row in rows]
+(root/'data'/'validation-bem.airframe').write_text('\n'.join(bem_rows+prop)+'\n')
 print(f'wrote {id_} cells')

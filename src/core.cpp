@@ -144,6 +144,44 @@ Definition Definition::load(const std::string &path) {
       s >> e.max_power >> e.rated_rpm >> e.prop_radius >> e.rotor_inertia >>
           e.ct >> e.cq >> e.advance_loss >> e.altitude_scale >> e.response;
       e.rpm = e.rated_rpm;
+    } else if (tag == "propeller") {
+      std::string model;
+      int blades, radial, azimuth;
+      double pitch, low, high, slew;
+      s >> model >> blades >> radial >> azimuth >> pitch >> low >> high >>
+          slew >> d.engine.pump_rpm >> d.engine.engine_friction;
+      if (model != "blade_element")
+        throw std::runtime_error("unknown propeller model");
+      auto &e = d.engine;
+      e.model = PropellerModel::BladeElement;
+      e.blades = blades;
+      e.radial_samples = radial;
+      e.azimuth_samples = azimuth;
+      e.pitch = rad(pitch);
+      e.pitch_min = rad(low);
+      e.pitch_max = rad(high);
+      e.pitch_slew = rad(slew);
+    } else if (tag == "blade") {
+      BladeStation b;
+      double twist;
+      s >> b.radius_fraction >> b.chord >> twist;
+      b.twist = rad(twist);
+      d.engine.stations.push_back(b);
+    } else if (tag == "prop_polar") {
+      CurvePoint p;
+      double a;
+      s >> a >> p.cl >> p.cd;
+      p.alpha = rad(a);
+      d.engine.polar.push_back(p);
+    } else if (tag == "prop_axis") {
+      s >> d.engine.axis.x >> d.engine.axis.y >> d.engine.axis.z;
+    } else if (tag == "governor") {
+      int enabled;
+      double kp, ki;
+      s >> enabled >> d.engine.target_rpm >> kp >> ki;
+      d.engine.governor = enabled;
+      d.engine.governor_kp = rad(kp);
+      d.engine.governor_ki = rad(ki);
     } else if (tag == "prop_position") {
       s >> d.engine.position.x >> d.engine.position.y >> d.engine.position.z;
     } else if (tag == "body_drag")
@@ -199,6 +237,7 @@ Definition Definition::load(const std::string &path) {
     throw std::runtime_error("initial structure disconnected");
   for (auto &c : d.cells)
     (void)lookup(d, c, 0);
+  prepare_propeller(d.engine);
   return d;
 }
 Simulation::Simulation(Definition d, double timestep)
@@ -362,6 +401,43 @@ void Simulation::update_controls(const PilotIntent &p) {
 }
 void advance_propulsion(Engine &e, double density, double altitude, double v,
                         double throttle, double dt) {
+  if (e.model == PropellerModel::BladeElement) {
+    advance_propeller_controls(e, throttle, dt);
+    double old = e.rpm * 2 * pi / 60, next = old;
+    // Implicit scalar midpoint, same signed loads used in free flight.
+    for (int it = 0; it < 12; ++it) {
+      double mid = (old + next) * .5;
+      auto loads = propeller_loads(e, density, e.axis * v, {}, mid);
+      double q = engine_shaft_torque(e, altitude, mid);
+      double residual =
+          next - old - dt * (q - loads.shaft_load) / e.rotor_inertia;
+      if (std::abs(residual) < 1e-10) {
+        e.torque = q;
+        e.aero_torque = loads.shaft_load;
+        e.thrust = dot(loads.at_mount.force, e.axis);
+        e.shaft_power = q * mid;
+        e.induced_velocity = loads.induced;
+        e.profile_loss = loads.profile_loss;
+        e.induced_loss = loads.induced_loss;
+        e.induction_residual = loads.momentum_residual;
+        e.induction_converged = loads.converged;
+        break;
+      }
+      double h = 1e-4;
+      auto shifted = propeller_loads(e, density, e.axis * v, {}, mid + h);
+      double qshift = engine_shaft_torque(e, altitude, mid + h);
+      double derivative =
+          1 - .5 * dt *
+                  ((qshift - shifted.shaft_load) - (q - loads.shaft_load)) /
+                  (h * e.rotor_inertia);
+      next -= residual / derivative;
+      if (it == 11)
+        throw std::runtime_error("rotor midpoint did not converge");
+    }
+    e.acceleration = (next - old) / dt;
+    e.rpm = next * 60 / (2 * pi);
+    return;
+  }
   e.throttle_state += (clamp(throttle, 0, 1) - e.throttle_state) *
                       (1 - std::exp(-dt / e.response));
   double omega = std::max(e.rpm * 2 * pi / 60, 0.);
@@ -391,27 +467,48 @@ void Simulation::update_engine(const PilotIntent &p) {
   double v = std::max(
       body.attitude.conjugate().rotate(body.velocity - wind_world).x, 0.);
   density = 1.225 * std::exp(body.position.z / 8500.);
-  advance_propulsion(def.engine, density, -body.position.z, v, p.throttle, dt);
+  if (def.engine.model == PropellerModel::Legacy)
+    advance_propulsion(def.engine, density, -body.position.z, v, p.throttle,
+                       dt);
+  else {
+    def.engine.target_rpm =
+        def.engine.rated_rpm * clamp(p.prop_rpm_ratio, .5, 1.1);
+    advance_propeller_controls(def.engine, p.throttle, dt);
+    def.engine.torque = engine_shaft_torque(def.engine, -body.position.z,
+                                            def.engine.rpm * 2 * pi / 60);
+  }
 }
 Wrench Simulation::evaluate(const Body &b, bool store) {
   double rho = 1.225 * std::exp(b.position.z / 8500.);
   Vec vb = b.attitude.conjugate().rotate(b.velocity - wind_world);
+  PropellerLoads blades;
+  Wrench prop;
+  if (def.engine.model == PropellerModel::BladeElement) {
+    blades = propeller_loads(def.engine, rho,
+                             vb + cross(b.omega, def.engine.position - mass.cg),
+                             b.omega, def.engine.rpm * 2 * pi / 60);
+    prop.add(blades.at_mount.force, def.engine.position - mass.cg,
+             blades.at_mount.moment);
+  }
   Wrench a;
   for (auto &c : def.cells) {
     if (!c.attached)
       continue;
     Vec r = c.position - mass.cg, local = vb + cross(b.omega, r);
-    // Axial actuator-disk slipstream, limited to the propeller/tail footprint.
-    if (c.position.x < def.engine.position.x &&
-        std::hypot(c.position.y - def.engine.position.y,
-                   c.position.z - def.engine.position.z) <
-            def.engine.prop_radius) {
+    Vec from_prop = c.position - def.engine.position;
+    double wake =
+        def.engine.model == PropellerModel::BladeElement ? blades.induced : 0;
+    if (def.engine.model == PropellerModel::Legacy) {
       double disk = pi * def.engine.prop_radius * def.engine.prop_radius;
-      local.x +=
-          .5 * (std::sqrt(vb.x * vb.x +
-                          2 * std::max(def.engine.thrust, 0.) / (rho * disk)) -
-                std::abs(vb.x));
+      wake = .5 * (std::sqrt(vb.x * vb.x + 2 * std::max(def.engine.thrust, 0.) /
+                                               (rho * disk)) -
+                   std::abs(vb.x));
     }
+    double along = dot(from_prop, def.engine.axis),
+           side = norm(from_prop - def.engine.axis * along);
+    double flow_sign = (dot(vb, def.engine.axis) + wake) >= 0 ? 1 : -1;
+    if (along * flow_sign < 0 && side < def.engine.prop_radius)
+      local += def.engine.axis * wake;
     double speed = norm(local), q = .5 * rho * speed * speed;
     Vec drag_dir = -unit(local);
     // Project into the actual flexed cell basis. Lift remains perpendicular to
@@ -455,13 +552,22 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
     }
   }
   a.add(-unit(vb) * (.5 * rho * dot(vb, vb) * def.body_drag_area), -mass.cg);
-  Wrench prop;
-  prop.add({def.engine.thrust, 0, 0}, def.engine.position - mass.cg,
-           {-def.engine.torque, 0, 0});
-  // First-order asymmetric blade-loading approximation: thrust offset grows
-  // with disk incidence.
-  prop.moment.z -= def.engine.thrust * .15 * def.engine.prop_radius *
-                   std::sin(std::atan2(vb.z, vb.x));
+  if (def.engine.model == PropellerModel::Legacy) {
+    prop.add({def.engine.thrust, 0, 0}, def.engine.position - mass.cg,
+             {-def.engine.torque, 0, 0});
+    prop.moment.z -= def.engine.thrust * .15 * def.engine.prop_radius *
+                     std::sin(std::atan2(vb.z, vb.x));
+  } else if (store) {
+    auto &e = def.engine;
+    e.thrust = dot(blades.at_mount.force, e.axis);
+    e.aero_torque = blades.shaft_load;
+    e.induced_velocity = blades.induced;
+    e.profile_loss = blades.profile_loss;
+    e.induced_loss = blades.induced_loss;
+    e.induction_residual = blades.momentum_residual;
+    e.induction_converged = blades.converged;
+    e.tip_mach = blades.tip_mach;
+  }
   if (store) {
     aero = a;
     propulsion = prop;
@@ -508,6 +614,114 @@ void integrate_body(Body &b, const MassProperties &m, const Wrench &force,
   b.attitude = (b.attitude * delta).normalized();
   b.omega = next;
 }
+RotorStep integrate_rotor_body(Body &b, const MassProperties &m, Engine &e,
+                               const Wrench &aero, Vec wind, double rho,
+                               double dt) {
+  const Body initial = b;
+  double spin0 = e.rpm * 2 * pi / 60;
+  std::vector<double> x{b.omega.x,    b.omega.y,    b.omega.z,   spin0,
+                        b.velocity.x, b.velocity.y, b.velocity.z};
+  PropellerLoads final_loads;
+  Quat final_mid;
+  Vec final_rates{}, final_velocity{};
+  double final_spin = 0, final_q = 0;
+  auto residual = [&](const std::vector<double> &v, bool record = false) {
+    Vec rates{v[0], v[1], v[2]}, velocity{v[4], v[5], v[6]};
+    double spin = v[3];
+    Vec mid_rates = (initial.omega + rates) * .5,
+        mid_velocity = (initial.velocity + velocity) * .5;
+    double mid_spin = (spin0 + spin) * .5;
+    double angle = 2 * std::atan(.5 * norm(mid_rates) * dt);
+    Quat qmid =
+        (initial.attitude * Quat::axis(mid_rates, angle * .5)).normalized();
+    Vec flow = qmid.conjugate().rotate(mid_velocity - wind) +
+               cross(mid_rates, e.position - m.cg);
+    auto loads = propeller_loads(e, rho, flow, mid_rates, mid_spin);
+    double motor = engine_shaft_torque(e, -initial.position.z, mid_spin);
+    Wrench external = aero;
+    external.add(loads.at_mount.force, e.position - m.cg,
+                 loads.at_mount.moment);
+    // Enforce the physical world-frame angular impulse using the same midpoint
+    // orientation as the forces. This is a coordinate-consistent discrete Euler
+    // equation, not an extra applied torque.
+    Quat qend = (initial.attitude * Quat::axis(mid_rates, angle)).normalized();
+    Vec old_H = initial.attitude.rotate(m.inertia * initial.omega +
+                                        e.axis * (e.rotor_inertia * spin0));
+    Vec new_H =
+        qend.rotate(m.inertia * rates + e.axis * (e.rotor_inertia * spin));
+    Vec angular = m.inertia.solve(qmid.conjugate().rotate(new_H - old_H) -
+                                  external.moment * dt);
+    double shaft = spin - spin0 + dot(rates - initial.omega, e.axis) -
+                   (motor - loads.shaft_load) * dt / e.rotor_inertia;
+    Vec linear =
+        velocity - initial.velocity -
+        (qmid.rotate(external.force) / m.mass + Vec{0, 0, gravity}) * dt;
+    if (record) {
+      final_loads = loads;
+      final_mid = qmid;
+      final_rates = mid_rates;
+      final_velocity = mid_velocity;
+      final_spin = mid_spin;
+      final_q = motor;
+    }
+    return std::vector<double>{angular.x, angular.y, angular.z, shaft,
+                               linear.x,  linear.y,  linear.z};
+  };
+  for (int it = 0; it < 12; ++it) {
+    auto f = residual(x);
+    double error = 0;
+    for (double v : f)
+      error += v * v;
+    if (std::sqrt(error) < 1e-10)
+      break;
+    std::vector<std::vector<double>> J(7, std::vector<double>(7));
+    for (int j = 0; j < 7; ++j) {
+      auto shifted = x;
+      double h = 1e-5 * std::max(1., std::abs(x[j]));
+      shifted[j] += h;
+      auto next = residual(shifted);
+      for (int i = 0; i < 7; ++i)
+        J[i][j] = (next[i] - f[i]) / h;
+    }
+    auto delta = linear_solve(J, f);
+    for (int j = 0; j < 7; ++j)
+      x[j] -= delta[j];
+    if (it == 11)
+      throw std::runtime_error("coupled rotor/body midpoint did not converge");
+  }
+  residual(x, true);
+  b.omega = {x[0], x[1], x[2]};
+  b.velocity = {x[4], x[5], x[6]};
+  b.position += (initial.velocity + b.velocity) * (.5 * dt);
+  double angle = 2 * std::atan(.5 * norm(final_rates) * dt);
+  b.attitude = (initial.attitude * Quat::axis(final_rates, angle)).normalized();
+  e.rpm = x[3] * 60 / (2 * pi);
+  e.acceleration = (x[3] - spin0) / dt;
+  e.torque = final_q;
+  e.shaft_power = final_q * final_spin;
+  e.aero_torque = final_loads.shaft_load;
+  e.thrust = dot(final_loads.at_mount.force, e.axis);
+  e.induced_velocity = final_loads.induced;
+  e.profile_loss = final_loads.profile_loss;
+  e.induced_loss = final_loads.induced_loss;
+  e.induction_converged = final_loads.converged;
+  e.induction_residual = final_loads.momentum_residual;
+  e.tip_mach = final_loads.tip_mach;
+  Wrench external = aero;
+  external.add(final_loads.at_mount.force, e.position - m.cg,
+               final_loads.at_mount.moment);
+  RotorStep result;
+  result.engine_work = final_q * final_spin * dt;
+  result.external_work =
+      (dot(final_mid.rotate(external.force), final_velocity) +
+       dot(external.moment, final_rates) -
+       final_loads.shaft_load * final_spin) *
+      dt;
+  result.prop_loss = (final_loads.profile_loss + final_loads.induced_loss) * dt;
+  result.impulse_world = final_mid.rotate(external.moment) * dt;
+  return result;
+}
+
 void Simulation::solve_structure(const std::vector<double> &bending,
                                  const std::vector<double> &torsion,
                                  double elapsed) {
@@ -629,8 +843,21 @@ void Simulation::assemble_structural_loads(const Wrench &forces) {
   // D'Alembert inertial relief: structural mass shares translational and
   // rotational acceleration. Uniform gravity cancels against the gravity
   // contribution to rigid-body acceleration.
-  Vec angular_accel = mass.inertia.solve(
-      forces.moment - cross(body.omega, mass.inertia * body.omega));
+  Vec angular_accel;
+  if (def.engine.model == PropellerModel::BladeElement) {
+    const auto &e = def.engine;
+    Mat effective = mass.inertia;
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+        effective.a[i][j] -= e.rotor_inertia * e.axis[i] * e.axis[j];
+    angular_accel =
+        effective.solve(forces.moment - e.axis * (e.torque - e.aero_torque) -
+                        cross(body.omega, mass.inertia * body.omega +
+                                              e.axis * (e.rotor_inertia *
+                                                        e.rpm * 2 * pi / 60)));
+  } else
+    angular_accel = mass.inertia.solve(
+        forces.moment - cross(body.omega, mass.inertia * body.omega));
   for (const auto &part : def.masses)
     if (def.nodes[part.node].attached) {
       Vec r = part.position - mass.cg;
@@ -652,7 +879,11 @@ void Simulation::step(const PilotIntent &p) {
   // ballistically.
   for (auto &d : debris)
     integrate_body(d.state, d.mass, Wrench{}, dt);
-  integrate_body(body, mass, forces, dt);
+  if (def.engine.model == PropellerModel::Legacy)
+    integrate_body(body, mass, forces, dt);
+  else
+    rotor_step = integrate_rotor_body(body, mass, def.engine, aero, wind_world,
+                                      density, dt);
   solve_structure(node_bending, node_torsion, dt);
   ++tick;
 }
@@ -698,19 +929,83 @@ void Simulation::reset_trim(const TrimResult &t, double speed,
       c.deflection = c.filtered = clamp(c.jam_position, -c.limit, c.limit);
   }
   def.engine.throttle_state = t.intent.throttle;
-  // Solve shaft/prop torque equilibrium for the trim's throttle.
   auto &e = def.engine;
-  double rho = 1.225 * std::exp(-altitude / 8500), D = 2 * e.prop_radius;
-  double power = e.max_power * t.intent.throttle *
-                 std::exp(-altitude / e.altitude_scale) * e.power_fraction *
-                 (e.running ? 1 : 0);
-  e.rpm = e.prop_fraction > 0 ? std::sqrt(std::max(power, 0.) * 60 /
-                                          (2 * pi * e.rated_rpm * e.cq * rho *
-                                           std::pow(D, 5) * e.prop_fraction)) *
-                                    60
-                              : e.rated_rpm;
-  e.rpm = std::min(e.rpm, e.rated_rpm * 1.15);
-  update_engine(t.intent);
+  if (e.model == PropellerModel::BladeElement) {
+    double rho = 1.225 * std::exp(-altitude / 8500);
+    Vec flow = body.attitude.conjugate().rotate(body.velocity - wind_world);
+    double preferred = e.pitch;
+    auto balance = [&](double value, bool pitch) {
+      if (pitch)
+        e.pitch = value;
+      double spin = pitch ? e.target_rpm * 2 * pi / 60 : value;
+      return propeller_loads(e, rho, flow, {}, spin).shaft_load -
+             engine_shaft_torque(e, altitude, spin);
+    };
+    bool pitch = e.governor && !e.pitch_jammed && e.pitch_rate_fraction > 0;
+    double lower = pitch ? e.pitch_min : 0,
+           upper =
+               pitch ? e.pitch_min + (e.pitch_max - e.pitch_min) * e.pitch_range
+                     : e.rated_rpm * 2 * pi / 60 * 4;
+    double selected = pitch ? preferred : e.rpm * 2 * pi / 60, best = 1e100,
+           lo = lower, hi = upper;
+    bool bracket = false;
+    double last = lower, last_f = balance(lower, pitch);
+    for (int j = 1; j <= 20; ++j) {
+      double value = lower + (upper - lower) * j / 20.,
+             f = balance(value, pitch);
+      if (std::abs(f) < best) {
+        best = std::abs(f);
+        selected = value;
+      }
+      if (f * last_f <= 0) {
+        lo = last;
+        hi = value;
+        bracket = true;
+        break;
+      }
+      last = value;
+      last_f = f;
+    }
+    if (bracket) {
+      double f_lo = balance(lo, pitch);
+      for (int j = 0; j < 32; ++j) {
+        double mid = (lo + hi) * .5, f = balance(mid, pitch);
+        if (f * f_lo <= 0)
+          hi = mid;
+        else {
+          lo = mid;
+          f_lo = f;
+        }
+      }
+      selected = (lo + hi) * .5;
+    }
+    if (pitch) {
+      e.pitch = selected;
+      e.rpm = e.target_rpm;
+    } else
+      e.rpm = selected * 60 / (2 * pi);
+    auto loads = propeller_loads(e, rho, flow, {}, e.rpm * 2 * pi / 60);
+    e.torque = engine_shaft_torque(e, altitude, e.rpm * 2 * pi / 60);
+    e.aero_torque = loads.shaft_load;
+    e.acceleration = (e.torque - e.aero_torque) / e.rotor_inertia;
+    e.thrust = dot(loads.at_mount.force, e.axis);
+    e.induced_velocity = loads.induced;
+    e.shaft_power = e.torque * e.rpm * 2 * pi / 60;
+  } else {
+    // Solve shaft/prop torque equilibrium for the trim's throttle.
+    double rho = 1.225 * std::exp(-altitude / 8500), D = 2 * e.prop_radius;
+    double power = e.max_power * t.intent.throttle *
+                   std::exp(-altitude / e.altitude_scale) * e.power_fraction *
+                   (e.running ? 1 : 0);
+    e.rpm = e.prop_fraction > 0
+                ? std::sqrt(std::max(power, 0.) * 60 /
+                            (2 * pi * e.rated_rpm * e.cq * rho *
+                             std::pow(D, 5) * e.prop_fraction)) *
+                      60
+                : e.rated_rpm;
+    e.rpm = std::min(e.rpm, e.rated_rpm * 1.15);
+    update_engine(t.intent);
+  }
 }
 TrimResult Simulation::trim(double speed, double altitude) {
   // Six residuals: alpha, roll/pitch/yaw trim, throttle, bank. Use
@@ -739,6 +1034,9 @@ TrimResult Simulation::trim(double speed, double altitude) {
     Vec gravity_body =
         body.attitude.conjugate().rotate({0, 0, mass.mass * gravity});
     Vec f = w.force + gravity_body;
+    if (def.engine.model == PropellerModel::BladeElement)
+      w.moment = w.moment -
+                 def.engine.axis * (def.engine.torque - def.engine.aero_torque);
     return std::vector<double>{
         f.x / (mass.mass * gravity), f.y / (mass.mass * gravity),
         f.z / (mass.mass * gravity), w.moment.x / 10000,
@@ -797,6 +1095,10 @@ TrimResult Simulation::trim(double speed, double altitude) {
   out.force_residual_N = actual.force + body.attitude.conjugate().rotate(
                                             {0, 0, mass.mass * gravity});
   out.moment_residual_Nm = actual.moment;
+  if (def.engine.model == PropellerModel::BladeElement)
+    out.moment_residual_Nm =
+        out.moment_residual_Nm -
+        def.engine.axis * (def.engine.torque - def.engine.aero_torque);
   out.rotor_acceleration = def.engine.acceleration;
   out.converged =
       out.residual < 1e-6 && std::abs(out.rotor_acceleration) < 1e-6;

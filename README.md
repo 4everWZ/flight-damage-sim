@@ -4,7 +4,7 @@ A renderer-free C++20 prototype for WWII-style propeller-aircraft flight, mixed 
 
 The first synthetic fixture has 152 aerodynamic cells, 6 structural nodes with front/rear/skin load paths, and independent damaged control chains. Mouse aim and keyboard requests reach actual control surfaces; forces and moments drive 6DoF motion at 120 Hz. Structural section/stiffness and load exposure cause redistribution and delayed failure. Separation follows graph disconnection and updates mass, CG and inertia.
 
-This is a measured first slice, **not completed v0.1 or a historically validated aircraft**. No HP, direct attitude control or scripted wing destruction substitutes for physics. Known limits include reduced structural statics/material law, ballistic detached pieces, fixed-pitch propulsion and basic Instructor guidance.
+This is a measured first slice, **not completed v0.1 or a historically validated aircraft**. No HP, direct attitude control or scripted wing destruction substitutes for physics. Known limits include reduced structural statics/material law, ballistic detached pieces, uncalibrated blade/engine data and basic Instructor guidance.
 
 ## Run
 
@@ -13,7 +13,8 @@ Requires C++20 GCC, GNU make and Python 3:
 ```sh
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
-python3 tools/propulsion_experiments.py
+python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
+python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
@@ -27,29 +28,31 @@ python3 tools/viewer.py                          # requires a desktop GUI backen
 python3 tools/plot_results.py                    # plots measured scenario CSVs
 ```
 
-Click the heading/elevation panel for mouse aim. Arrows control pitch/roll; Q/E yaw; W/S throttle. F2–F6 inject local skin loss, damaged control links, weakened spar or engine power loss. Space pauses; R resets; M cycles new/legacy/off guidance. Use `--controller legacy` or `--controller off` at startup for comparisons. Aim elevation requests air-relative flight-path angle, not altitude or nose attitude. Device keys exist only in the viewer adapter.
+Click the heading/elevation panel for mouse aim. Arrows control pitch/roll; Q/E yaw; W/S throttle. F2–F7 inject local skin loss, damaged control links, weakened spar, engine power loss or pitch jam. G toggles the pitch governor; PgUp/PgDn adjust target RPM. Space pauses; R resets; M cycles new/legacy/off guidance. Use `--controller legacy` or `--controller off` at startup for comparisons. The viewer defaults to the signed propeller variant; use `--airframe validation.airframe` for the legacy propulsion comparison. Aim elevation requests air-relative flight-path angle, not altitude or nose attitude. Device keys exist only in the viewer adapter.
 
 ## Minimal integration boundary
 
-`PilotIntent` carries a world aim direction, normalized roll/pitch/yaw requests, one active flag per axis, throttle and available trim. `Simulation::step` advances one fixed tick. Per-cell loads remain available before reduction to a `Wrench`; `integrate_body` is the independent force/moment-to-state boundary. SI units and frame conventions are documented in current decisions and the core header.
+`PilotIntent` carries a world aim direction, normalized roll/pitch/yaw requests, one active flag per axis, throttle, available trim and requested prop RPM ratio. `Simulation::step` advances one fixed tick. Per-cell loads remain available before reduction to a `Wrench`; `integrate_body` is the rigid force/moment boundary, and `integrate_rotor_body` jointly integrates the free body and internal spinning shaft. SI units and frame conventions are documented in current decisions and the core header.
 
-`build/flight-live data/validation.airframe` provides a line-oriented local transport. It emits an initial JSON snapshot, then one snapshot per command:
+`build/flight-live data/validation-bem.airframe` provides a line-oriented local transport. It emits an initial JSON snapshot, then one snapshot per command:
 
 ```text
-step ticks aim_x aim_y aim_z mouse roll pitch yaw roll_active pitch_active yaw_active throttle trim_roll trim_pitch trim_yaw
+step ticks aim_x aim_y aim_z mouse roll pitch yaw roll_active pitch_active yaw_active throttle trim_roll trim_pitch trim_yaw [prop_rpm_ratio=1]
 damage cell id area_fraction roughness
 damage spar edge_name remaining_section
 damage link chain_name
 damage engine power_fraction
 damage prop prop_fraction
+damage governor
+governor on|off
 controller flightpath|flightpath-p|legacy|off
 reset
 quit
 ```
 
-A batch contains 0–120 fixed ticks. Damage applies at the current tick boundary. Snapshots include body pose/velocity/rates, CG/mass, actual surfaces, ownership, Instructor target rates, local cell flow/forces/stall/damage and structural section/stiffness/loads/strain/failure. `tools/live_client.py` demonstrates the transport; it never writes attitude or runs flight equations.
+A batch contains 0–120 fixed ticks. Damage applies at the current tick boundary. Snapshots include body pose/velocity/rates, CG/mass, prop pitch/RPM/target/saturation/tip Mach, actual surfaces, ownership, Instructor target rates, local cell flow/forces/stall/damage and structural section/stiffness/loads/strain/failure. `tools/live_client.py` demonstrates the transport; it never writes attitude or runs flight equations.
 
-The independent mechanics review found and repaired torque-free rotation drift, flexed-wing lift work, initial handoff ownership and damaged trim bypass. New PI guidance reduces this fixture's 90° turn minimum height loss from ~41 m to ~19 m and final loss from ~32 m to ~0.2 m. This is a synthetic case; transient loss and damaged/energy-limited behavior remain. Raw trim residuals, failed hypotheses and comparative trajectories are documented below. The propulsion bench also checks shaft reaction, power budget and rotor timestep behavior, while retaining failed stopped-prop/windmilling hypotheses. The CI workflow runs the same reproducible entrypoints.
+The independent mechanics review found and repaired torque-free rotation drift, flexed-wing lift work, initial handoff ownership and damaged trim bypass. New PI guidance reduces this fixture's 90° turn minimum height loss from ~41 m to ~19 m and final loss from ~32 m to ~0.2 m. This is a synthetic case; transient loss and damaged/energy-limited behavior remain. Raw trim residuals, failed hypotheses and comparative trajectories are documented below. The signed prop model produces stopped-blade drag, wind-driven startup and speed-dependent load; a finite pitch governor ends near 1600.36 RPM for a 1600 RPM target, while jam/travel damage retain real overspeed. Six flight cases close the discrete energy/world-torque-impulse ledgers. The old propulsion variant retains its failed stopped-prop/windmilling/load hypotheses. All prop values are synthetic, with no compressibility/tip/swirl correction; overspeed cases do not validate transonic behavior. The CI workflow runs the same reproducible entrypoints.
 
 ## Project documents
 

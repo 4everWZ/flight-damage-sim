@@ -25,6 +25,7 @@ class Viewer:
         self.plt=plt
         self.keys=set()
         self.aim=(1,0,0)
+        self.prop_rpm_ratio=1
         self.paused=False
         self.previous=time.monotonic()
         self.accumulator=0
@@ -51,7 +52,7 @@ class Viewer:
         if event.key=='space':
             self.paused=not self.paused
         elif event.key=='r':
-            self.core.command('reset');self.aim=(1,0,0)
+            self.core.command('reset');self.aim=(1,0,0);self.prop_rpm_ratio=1
         elif event.key=='m':
             modes=['flightpath','legacy','off']
             current=self.core.state['controller']
@@ -62,6 +63,8 @@ class Viewer:
         elif event.key=='f3':self.core.command('damage link left_aileron')
         elif event.key=='f4':self.core.command('damage spar left_root_front .3')
         elif event.key=='f5':self.core.command('damage link elevator')
+        elif event.key=='g' and self.core.state['propeller_model']=='blade_element':self.core.command('governor '+('off' if self.core.state['governor'] else 'on'))
+        elif event.key=='f7':self.core.command('damage governor')
         elif event.key=='f6':self.core.command('damage engine .5')
 
     def advance(self,ticks):
@@ -71,7 +74,8 @@ class Viewer:
         # Opposing pressed keys still own that axis and request zero.
         active=tuple(any(k in self.keys for k in pair) for pair in [('left','right'),('up','down'),('q','e')])
         throttle=max(0,min(1,self.core.state['throttle']+.2*ticks/120*(int('w' in self.keys)-int('s' in self.keys))))
-        return self.core.step(ticks,aim=self.aim,direct=direct,active=active,throttle=throttle)
+        self.prop_rpm_ratio=max(.5,min(1.1,self.prop_rpm_ratio+.15*ticks/120*(int('pageup' in self.keys)-int('pagedown' in self.keys))))
+        return self.core.step(ticks,aim=self.aim,direct=direct,active=active,throttle=throttle,prop_rpm_ratio=self.prop_rpm_ratio)
 
     def frame(self,_):
         now=time.monotonic()
@@ -127,10 +131,10 @@ class Viewer:
         owners=' / '.join(f'{a}: {o["direct_weight"]:.2f}' for a,o in zip(('roll','pitch','yaw'),s['ownership']))
         surfaces=' '.join(f'{c["name"]}={math.degrees(c["deflection"]):+.1f}°' for c in s['chains'])
         speed=math.sqrt(sum((v-w)**2 for v,w in zip(s['velocity'],s['wind'])))
-        self.hud.set_text(f'{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
-                          f'Direct ownership weights: {owners}\nSurfaces: {surfaces}\n'
+        self.hud.set_text(f'{s["propeller_model"]}/{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
+                          f'Prop pitch={math.degrees(s["prop_pitch"]):.1f}° target={s["target_rpm"]:.0f}rpm limited={s["governor_saturated"]} tipMach={s["tip_mach"]:.2f}   Direct: {owners}\nSurfaces: {surfaces}\n'
                           'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   Space: pause   R: reset   M: controller\n'
-                          'F2: left skin loss   F3: left aileron cable   F4: spar section 30%   F5: elevator cable   F6: half engine power')
+                          'F2: left skin loss   F3: left aileron cable   F4: spar section 30%   F5: elevator cable   F6: half power   G: governor   F7: pitch jam   PgUp/Dn: RPM request')
 
 
 def smoke(core,plt):
@@ -173,6 +177,18 @@ def smoke(core,plt):
     core.command('controller legacy')
     assert core.command('reset')['controller']=='legacy'
     core.command('controller flightpath')
+    # A requested prop speed changes a finite pitch actuator, never writes measured rotor RPM.
+    if core.state['propeller_model']=='blade_element':
+        before=core.state['rpm']
+        s=core.step(1,prop_rpm_ratio=.9)
+        assert abs(s['target_rpm']-1440)<1e-6 and abs(s['rpm']-before)<5
+        core.command('damage governor')
+        jam=s['prop_pitch']
+        s=core.step(24,prop_rpm_ratio=1.1)
+        assert s['pitch_jammed'] and abs(s['prop_pitch']-jam)<1e-12
+        core.command('governor off')
+        assert core.command('reset')['governor'] is False
+        core.command('governor on')
     viewer.draw()
     output=ROOT/'results'/'viewer-smoke.png'
     output.parent.mkdir(exist_ok=True)
@@ -184,6 +200,7 @@ def smoke(core,plt):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--smoke',action='store_true')
+    parser.add_argument('--airframe',default='validation-bem.airframe')
     parser.add_argument('--controller',choices=['flightpath','legacy','off'],default='flightpath')
     args=parser.parse_args()
     cache=ROOT/'build'/'viewer-cache'
@@ -195,7 +212,7 @@ def main():
     import matplotlib.pyplot as plt
     for key in ('quit','fullscreen','home','back','forward','pan','zoom','save'):
         plt.rcParams['keymap.'+key]=[]
-    with CoreClient() as core:
+    with CoreClient(args.airframe) as core:
         core.command('controller '+args.controller)
         if args.smoke:
             smoke(core,plt)

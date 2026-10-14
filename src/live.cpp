@@ -39,6 +39,19 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
   std::cout << ",\"rate_bias\":[" << s.instructor.rate_bias[0] << ','
             << s.instructor.rate_bias[1] << ',' << s.instructor.rate_bias[2]
             << ']';
+  std::cout << ",\"propeller_model\":"
+            << std::quoted(s.def.engine.model == PropellerModel::BladeElement
+                               ? "blade_element"
+                               : "legacy")
+            << ",\"prop_pitch\":" << s.def.engine.pitch
+            << ",\"target_rpm\":" << s.def.engine.target_rpm
+            << ",\"governor\":" << (s.def.engine.governor ? "true" : "false")
+            << ",\"governor_saturated\":"
+            << (s.def.engine.governor_saturated ? "true" : "false")
+            << ",\"pitch_jammed\":"
+            << (s.def.engine.pitch_jammed ? "true" : "false")
+            << ",\"shaft_power\":" << s.def.engine.shaft_power
+            << ",\"tip_mach\":" << s.def.engine.tip_mach;
   std::cout << ",\"ownership\":[";
   for (int i = 0; i < 3; ++i) {
     if (i)
@@ -112,14 +125,27 @@ int main(int argc, char **argv) {
         if (op == "quit")
           break;
         if (op == "reset") {
+          bool governed = s.def.engine.governor;
           auto mode = s.instructor_mode;
           auto parameters = s.guidance;
           s = Simulation(fixture);
+          s.def.engine.governor = governed;
           s.instructor_mode = mode;
           s.guidance = parameters;
           tr = s.trim(70, 1000);
           p = tr.intent;
           p.mouse = true;
+        } else if (op == "governor") {
+          if (s.def.engine.model != PropellerModel::BladeElement)
+            throw std::runtime_error("legacy reference has no pitch governor");
+          std::string mode;
+          input >> mode;
+          if (mode == "on")
+            s.def.engine.governor = true;
+          else if (mode == "off")
+            s.def.engine.governor = false;
+          else
+            throw std::runtime_error("invalid governor mode");
         } else if (op == "controller") {
           std::string mode;
           input >> mode;
@@ -152,6 +178,12 @@ int main(int argc, char **argv) {
               throw std::runtime_error("non-finite trim");
           if (!std::isfinite(next.throttle))
             throw std::runtime_error("non-finite throttle");
+          input >> std::ws;
+          if (!input.eof()) {
+            input >> next.prop_rpm_ratio;
+            if (!input || !std::isfinite(next.prop_rpm_ratio))
+              throw std::runtime_error("invalid prop RPM ratio");
+          }
           next.mouse = mouse;
           next.active = {bool(r), bool(pitch), bool(yaw)};
           p = next;
@@ -160,7 +192,9 @@ int main(int argc, char **argv) {
         } else if (op == "damage") {
           std::string target, name;
           input >> target;
-          if (target == "cell") {
+          if (target == "governor") {
+            s.def.engine.pitch_jammed = true;
+          } else if (target == "cell") {
             int id;
             double area, roughness;
             input >> id >> area >> roughness;

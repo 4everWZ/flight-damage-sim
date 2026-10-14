@@ -73,6 +73,23 @@ def main():
         for ax in plots.flat:ax.grid(alpha=.2);ax.legend(fontsize=8)
         comparison.suptitle('Same corrected dynamics · no pose/torque corrections · 120 Hz synthetic fixture')
         comparison.savefig(RESULTS/'instructor-comparison.png',dpi=150)
+    if (RESULTS/'governor.csv').exists():
+        rows=list(csv.DictReader((RESULTS/'governor.csv').open()))
+        rotor,plots=plt.subplots(2,2,figsize=(12,8),layout='constrained')
+        for col,cases in enumerate([['fixed','governed','jammed'],['windmill','limited']]):
+            for case in cases:
+                trace=[r for r in rows if r['case']==case and float(r['hz'])==120]
+                time=[float(r['time']) for r in trace]
+                plots[0,col].plot(time,[float(r['rpm']) for r in trace],label=case)
+                plots[1,col].plot(time,[float(r['pitch'])*180/3.141592653589793 for r in trace],label=case)
+            plots[0,col].axhline(1600,color='grey',ls=':',label='target 1600 RPM')
+            plots[0,col].set(xlabel='Time (s)',ylabel='Relative shaft RPM')
+            plots[1,col].set(xlabel='Time (s)',ylabel='Collective pitch (deg)')
+        plots[0,0].set_title('70 → 110 m/s at 15 s; throttle .75 → .95 at 25 s')
+        plots[0,1].set_title('Windmill: stopped/off at 80 m/s; limited: damaged travel')
+        for ax in plots.flat:ax.grid(alpha=.2);ax.legend(fontsize=8)
+        rotor.suptitle('Synthetic signed blade model · finite pitch governor · overspeed is numerical evidence, not transonic fidelity')
+        rotor.savefig(RESULTS/'rotor-governor.png',dpi=150)
     print(output)
 
 if __name__=='__main__':main()

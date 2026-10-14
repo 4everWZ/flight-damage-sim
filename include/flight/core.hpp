@@ -15,7 +15,7 @@ struct PilotIntent {
   bool mouse = false;
   std::array<double, 3> direct{}, trim{};
   std::array<bool, 3> active{};
-  double throttle = 0;
+  double throttle = 0, prop_rpm_ratio = 1;
 };
 struct Body {
   Vec position{0, 0, -1000}, velocity{70, 0, 0}, omega{};
@@ -91,19 +91,55 @@ struct StructuralEdge {
     return std::pow(remaining_section, 2) * std::exp(-12 * plastic_strain);
   }
 };
+enum class PropellerModel { Legacy, BladeElement };
+struct BladeStation {
+  double radius_fraction = 0, chord = 0, twist = 0;
+};
+struct BladeStrip {
+  Vec offset{}, radial{};
+  double area = 0, twist = 0;
+};
+struct PropellerLoads {
+  Wrench at_mount{};
+  double shaft_load = 0, induced = 0, profile_loss = 0, induced_loss = 0;
+  double momentum_residual = 0, tip_mach = 0;
+  bool converged = false;
+};
 struct Engine {
-  Vec position{};
+  Vec position{}, axis{1, 0, 0};
+  PropellerModel model = PropellerModel::Legacy;
+  std::vector<BladeStation> stations;
+  std::vector<CurvePoint> polar;
+  std::vector<BladeStrip> strips;
+  int blades = 2, radial_samples = 12, azimuth_samples = 8;
+  double pitch = rad(22), pitch_min = rad(8), pitch_max = rad(55),
+         pitch_slew = rad(10);
+  double governor_kp = rad(18), governor_ki = rad(8), governor_integral = 0,
+         target_rpm = 0;
+  double pitch_range = 1, pitch_rate_fraction = 1, pump_rpm = 400,
+         engine_friction = .15;
+  bool governor = false, pitch_jammed = false, governor_saturated = false;
+  double induced_velocity = 0, profile_loss = 0, induced_loss = 0, tip_mach = 0;
+  double induction_residual = 0;
+  bool induction_converged = false;
   double max_power = 0, rated_rpm = 0, prop_radius = 0, rotor_inertia = 0,
          ct = 0, cq = 0, advance_loss = 0, altitude_scale = 0, response = 0;
   double acceleration = 0, aero_torque = 0;
   double rpm = 0, throttle_state = 0, power_fraction = 1, prop_fraction = 1,
          thrust = 0, torque = 0, shaft_power = 0;
-  bool running = true; // initial implementation: fixed-pitch propeller
+  bool running = true; // Output-shaft map; no combustion/starter model.
 };
 // Authoritative component step. SI: density kg/m^3, altitude/airspeed m and
 // m/s.
 void advance_propulsion(Engine &, double density, double altitude,
                         double axial_airspeed, double throttle, double dt);
+void prepare_propeller(Engine &);
+PropellerLoads propeller_loads(const Engine &, double density,
+                               Vec velocity_at_mount, Vec body_rates,
+                               double relative_omega);
+double engine_shaft_torque(const Engine &, double altitude,
+                           double relative_omega);
+void advance_propeller_controls(Engine &, double throttle, double dt);
 struct Definition {
   std::vector<AeroCell> cells;
   std::vector<ControlChain> chains;
@@ -118,6 +154,16 @@ struct Definition {
 };
 void integrate_body(Body &, const MassProperties &, const Wrench &,
                     double elapsed);
+struct RotorStep {
+  double engine_work = 0, external_work = 0, prop_loss = 0;
+  Vec impulse_world{};
+};
+RotorStep integrate_rotor_body(Body &, const MassProperties &, Engine &,
+                               const Wrench &aero, Vec wind, double density,
+                               double dt);
+double mechanical_energy(const Body &, const MassProperties &, const Engine &);
+Vec total_angular_momentum(const Body &, const MassProperties &,
+                           const Engine &);
 struct DetachedBody {
   Body state;
   MassProperties mass;
@@ -146,6 +192,7 @@ public:
   double dt = 1. / 120;
   Wrench aero{}, propulsion{};
   double density = 1.1, load_factor = 0;
+  RotorStep rotor_step;
   explicit Simulation(Definition d, double timestep = 1. / 120);
   void step(const PilotIntent &input);
   Wrench evaluate(const Body &b, bool store = false);
