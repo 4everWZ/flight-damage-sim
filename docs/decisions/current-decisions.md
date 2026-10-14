@@ -146,6 +146,14 @@ The old stopped-prop, wind-start and speed-load failures remain reproducible wit
 
 The first commit had no Actions runs/status checks. A minimal repository workflow builds these same tests, runs core/Instructor/legacy propulsion/signed rotor experiment entrypoints and the Agg viewer. The second-iteration remote run passed all build, experiment and render steps; each subsequent pushed head must be checked separately. Local passes are not a remote-CI result. Focused ASan/UBSan mechanics review also passes in Cloud.
 
+## Viewer delivery checkpoint
+
+[Viewer operations](../viewer-operations.md) now own the minimal isolated startup, complete controls, telemetry interpretation and manual review checklist. GUI delivery uses TkAgg with native FocusOut plus Matplotlib figure-leave input release/pause. All built-in keymaps are disabled; three trim inputs are available; reset clears held axes/knobs and presentation clock balance while preserving controller/governor/pause choices. Opposing keys keep their axis owned with zero request. Action latches and deferred Tk release/press pairing prevent repeat toggles. Pause drops wall-time backlog; slow presentation runs at most 12 fixed ticks per frame without changing core dt.
+
+`--smoke` dispatches actual Matplotlib events through the viewer and C++ transport. It checks conflicting/held/opposing keys, mode/governor press repeat, knobs, reset, focus loss, pause/resume/fractional tick and long presentation stall, damage/reset and rendering. A real headless Tcl idle queue verifies the native repeat coalescer when tkinter is available (present in Cloud). The repository-local virtual environment also passed the same smoke with its installed Matplotlib. No core force/control/structure model changed in this delivery step. The marked PNG and JSON are automatic evidence, not native window focus or human flight-feel results.
+
+Development stops at this review milestone. Desktop Tk focus/Alt-Tab, key repeat/layout, realtime performance, aim/control clarity and damaged handling are the actual outstanding human checks. Later core limitations stay in the current plan; no automatic full-game expansion is implied.
+
 ## How decisions change
 
 Record a testable hypothesis, actual result, uncertainty and useful next experiment. Routine reversible implementation choices can proceed; any choice removing or weakening a core requirement must be reported first. Preserve failed evidence when it changes interpretation. Do not turn partial mechanisms, stubs or a rendered aircraft into a claim of full v0.1 completion.

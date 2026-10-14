@@ -22,13 +22,16 @@ This builds and runs core assertions plus flight/control/damage/structure scenar
 An optional Matplotlib engineering viewer displays attitude, local cell forces, missing skin, actual controls, axis ownership and structural utilization:
 
 ```sh
-python3 -m pip install -r requirements-viewer.txt  # in an isolated local environment, if needed
-python3 tools/viewer.py --smoke                  # headless transport/render test
-python3 tools/viewer.py                          # requires a desktop GUI backend
-python3 tools/plot_results.py                    # plots measured scenario CSVs
+make -j2 build/flight-live
+python3 -m venv .venv-viewer
+.venv-viewer/bin/python -m pip install --no-cache-dir -r requirements-viewer.txt
+.venv-viewer/bin/python tools/viewer.py --smoke       # no display needed
+MPLBACKEND=TkAgg .venv-viewer/bin/python tools/viewer.py  # desktop Python with Tk
 ```
 
-Click the heading/elevation panel for mouse aim. Arrows control pitch/roll; Q/E yaw; W/S throttle. F2–F7 inject local skin loss, damaged control links, weakened spar, engine power loss or pitch jam. G toggles the pitch governor; PgUp/PgDn adjust target RPM. Space pauses; R resets; M cycles new/legacy/off guidance. Use `--controller legacy` or `--controller off` at startup for comparisons. The viewer defaults to the signed propeller variant; use `--airframe validation.airframe` for the legacy propulsion comparison. Aim elevation requests air-relative flight-path angle, not altitude or nose attitude. Device keys exist only in the viewer adapter.
+[Viewer startup, controls, telemetry and manual checks](docs/viewer-operations.md) cover mouse aim, keyboard axes, throttle, three-axis trim, prop RPM/governor, damage, focus release, pause and reset. All Matplotlib keymaps are disabled. The viewer pauses on lost focus/pointer exit, clears held input and drops wall-time backlog; physics stays at 120 Hz. Automated callbacks and a real Tcl idle queue are tested; native desktop focus/keyboard behavior and human handling remain unverified. The smoke image is marked as an offline test.
+
+The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. The current review milestone stops here; the next required check is desktop human operation, not automatic expansion into a full game.
 
 ## Minimal integration boundary
 
@@ -56,6 +59,7 @@ The independent mechanics review found and repaired torque-free rotation drift, 
 
 ## Project documents
 
+- [Viewer operations and review milestone](docs/viewer-operations.md)
 - [Current decisions, measured evidence and limitations](docs/decisions/current-decisions.md)
 - [Implementation plan, original acceptance mapping and next experiments](docs/plans/codex-cloud-first-iteration.md)
 - [Unchanged recovered 51-section specification](docs/spec/flight-sim-core-v0.1.original.md)

@@ -26,3 +26,11 @@ jobs:
           python3 -m pip install -r requirements-viewer.txt
           python3 tools/viewer.py --smoke
           python3 tools/plot_results.py
+      - name: Preserve viewer slice evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-slice-evidence
+          path: |
+            results/viewer-smoke.png
+            results/viewer-input-summary.json
+          if-no-files-found: error

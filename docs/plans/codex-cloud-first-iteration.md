@@ -10,6 +10,10 @@ The core/Instructor and signed-propulsion iterations, with a Matplotlib engineer
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
+## Review milestone
+
+The delivery slice is ready for review once its head's CI passes: mouse/axes, throttle/trim/prop, damage, focus release, pause/reset and readable telemetry. [Viewer operations](../viewer-operations.md) own isolated startup commands and the manual checklist. Automated Agg callbacks/transport and a headless Tcl idle queue support input lifecycle; native Tk window focus, platform key repeat, realtime cadence and human handling remain unverified. Pause/reset discard clock balance, presentation stalls cap catch-up and C++ remains fixed at 120 Hz. Stop development at this milestone until review; the later core tasks below are recorded work, not authorization to expand automatically.
+
 ## Reproduce
 
 ```sh
@@ -22,11 +26,10 @@ python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
 
-The headless path uses only GCC supporting C++20, GNU make and Python's standard library. The optional viewer/plots use Matplotlib (`python3 -m pip install -r requirements-viewer.txt` in a local isolated environment if absent). On a machine with a desktop backend, `python3 tools/viewer.py` opens the live engineering view. Click heading/elevation to set aim; arrows control pitch/roll, Q/E yaw, W/S throttle. F2–F7 inject cell/link/spar/engine/pitch-jam damage. G toggles the governor and PgUp/PgDn adjust requested shaft RPM. Space pauses, R resets while preserving controller/governor choice, and M cycles new/legacy/off. The viewer defaults to `validation-bem.airframe`; `--airframe validation.airframe` selects the retained legacy propulsion variant. `--controller legacy` or `--controller off` selects a guidance comparison on either variant; these are automatic-input/transport tests, not human flight-feel validation.
-
+The headless path uses only GCC supporting C++20, GNU make and Python's standard library. The optional viewer/plots use Matplotlib. The [operations manual](../viewer-operations.md) contains the tested repository-local virtual environment and TkAgg startup, every input/damage command, telemetry interpretation and manual checks; Cloud uses `--smoke` instead of a GUI. Guidance and legacy propulsion comparisons remain available.
 `build/flight-run data/validation.airframe <scenario> results/<prefix> [hz=120] [seconds=10] [controller=flightpath|flightpath-p|legacy|off] [bank_deg=40]` runs a single scenario; available names are defined in `src/runner.cpp`. The experimental 240 Hz option exists for convergence. Live mode is fixed at 120 Hz. Inputs and damage commands are applied at explicit tick boundaries; viewer rendering does not alter dt.
 
-`results/summary.json`, `results/instructor-summary.json` and `results/propulsion-summary.json` and `results/rotor-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png`, `instructor-comparison.png` and `rotor-governor.png` are scientific plots; `viewer-smoke.png` is an Agg rendering of live state. These generated results stay untracked.
+`results/summary.json`, `results/instructor-summary.json` and `results/propulsion-summary.json` and `results/rotor-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png`, `instructor-comparison.png` and `rotor-governor.png` are scientific plots; `viewer-smoke.png` is a marked offline Agg rendering of live state; `viewer-input-summary.json` records input lifecycle checks with `human_gui_verified=false`. These generated results stay untracked.
 
 ## Original acceptance mapping
 
@@ -46,13 +49,13 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 | TEST-DMG-004 large skin loss | Partial | 25% aero loss does not detach; large-area fixture with trim difficulty pending |
 | TEST-DMG-005 critical hit | Partial | Connectivity and mass split tested; dedicated small-entry-hole/high-load scenario pending |
 | §29–30 separation/feedback | Implemented reduced model and tested | Graph connectivity, CG/full inertia and split momentum, elastic feedback. Detached-body aero/collisions pending |
-| §36–37 debugging | Partial, runnable | Cell/link/spar/engine/prop events, CSV/JSON, live intent, force arrows/utilization. Full structural heatmap and GUI handling validation pending |
+| §36–37 debugging | Partial, runnable and adapter-tested | Mouse/axes/throttle/three trim/prop/damage, per-axis ownership, lost-focus/pause/reset, CSV/JSON, forces/utilization. Full structural heatmap and native GUI/human handling validation pending |
 | §33–35 projectiles/HE/fire | Not implemented | Follow core damage injection; do not replace it with HP |
 | §38–42 aircraft reuse/fidelity | One data-defined synthetic fixture | Historical data and ≥3 substantially different aircraft remain pending |
 | §45 replay | Tested same binary | No stochastic effects yet; explicit seed required when introduced |
 | §48–49 first playable/full success | Not complete | Engineering viewer is available; finished sky/terrain camera and human flight-feel evaluation remain open |
 
-## Next useful experiments
+## Later useful experiments (after milestone review)
 
 1. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
 2. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.

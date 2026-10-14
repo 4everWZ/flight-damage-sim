@@ -19,11 +19,25 @@ def rotate(v, q):
     return (v[0]+w*tx+y*tz-z*ty,v[1]+w*ty+z*tx-x*tz,v[2]+w*tz+x*ty-y*tx)
 
 
+# Disable every built-in Matplotlib shortcut: q/s/g/arrows/trim keys belong to flight.
+def configure_keymaps(plt):
+    for key in plt.rcParams:
+        if key.startswith('keymap.'):
+            plt.rcParams[key]=[]
+
+
 class Viewer:
+    HELD_KEYS={'left','right','up','down','q','e','w','s','pageup','pagedown','i','k','j','l','u','o'}
+    ACTION_KEYS={'space','r','m','f2','f3','f4','f5','f6','f7','g'}
     def __init__(self, core, plt):
         self.core=core
         self.plt=plt
+        configure_keymaps(plt)
         self.keys=set()
+        self.blocked_keys=set()
+        self.pressed_actions=set()
+        self.pending_releases={}
+        self.tk_widget=None
         self.aim=(1,0,0)
         self.prop_rpm_ratio=1
         self.paused=False
@@ -36,36 +50,89 @@ class Viewer:
         self.hud=self.fig.text(.035,.03,'',color='white',fontsize=10,family='monospace')
         self.fig.suptitle('Flight Damage Sim · synthetic 152-cell airframe · C++ 120 Hz',color='white',fontsize=15)
         self.fig.canvas.mpl_connect('key_press_event',self.key_down)
-        self.fig.canvas.mpl_connect('key_release_event',lambda e:self.keys.discard(e.key))
+        self.fig.canvas.mpl_connect('key_release_event',self.key_up)
+        self.fig.canvas.mpl_connect('figure_leave_event',self.focus_lost)
+        # Tk FocusOut also catches Alt-Tab while the pointer remains over the canvas.
+        if hasattr(self.fig.canvas,'get_tk_widget'):
+            self.tk_widget=self.fig.canvas.get_tk_widget()
+            self.tk_widget.bind('<FocusOut>',self.focus_lost,add='+')
         self.fig.canvas.mpl_connect('button_press_event',self.set_aim)
         self.fig.canvas.mpl_connect('close_event',lambda _:core.close())
         self.draw()
 
     def set_aim(self,event):
-        if event.inaxes!=self.aim_axis or event.xdata is None:
+        if event.inaxes!=self.aim_axis or event.xdata is None or event.ydata is None or getattr(event,'button',1)!=1:
             return
         heading,elevation=map(math.radians,(event.xdata,event.ydata))
         self.aim=(math.cos(elevation)*math.cos(heading),math.cos(elevation)*math.sin(heading),-math.sin(elevation))
 
+    def release_inputs(self):
+        # A held key must be released before its auto-repeat can reactivate after reset/pause.
+        self.blocked_keys.update(self.keys)
+        self.keys.clear()
+
+    def focus_lost(self,_):
+        self.release_inputs()
+        self.paused=True
+        self.accumulator=0
+        self.previous=time.monotonic()
+
+    def finish_release(self,key):
+        self.pending_releases.pop(key,None)
+        self.keys.discard(key)
+        self.blocked_keys.discard(key)
+        self.pressed_actions.discard(key)
+
+    def key_up(self,event):
+        key=(event.key or '').lower()
+        native=getattr(event,'guiEvent',None)
+        if self.tk_widget is not None and native is not None:
+            # X11/Tk may repeat as a release/press pair with the same timestamp.
+            # Defer release until idle so the paired press can keep its latch.
+            if key in self.pending_releases:
+                self.tk_widget.after_cancel(self.pending_releases[key][0])
+            callback=self.tk_widget.after_idle(lambda:self.finish_release(key))
+            self.pending_releases[key]=(callback,native.time)
+        else:
+            self.finish_release(key)
+
     def key_down(self,event):
-        self.keys.add(event.key)
-        if event.key=='space':
+        key=(event.key or '').lower()
+        if key in self.pending_releases:
+            callback,stamp=self.pending_releases.pop(key)
+            self.tk_widget.after_cancel(callback)
+            if getattr(getattr(event,'guiEvent',None),'time',None)!=stamp:
+                self.finish_release(key)
+        if key in self.HELD_KEYS:
+            if key not in self.blocked_keys and not self.paused:
+                self.keys.add(key)
+            return
+        if key not in self.ACTION_KEYS or key in self.pressed_actions:
+            return
+        self.pressed_actions.add(key)
+        if key=='space':
             self.paused=not self.paused
-        elif event.key=='r':
+            self.release_inputs()
+            self.accumulator=0
+            self.previous=time.monotonic()
+        elif key=='r':
+            self.release_inputs()
             self.core.command('reset');self.aim=(1,0,0);self.prop_rpm_ratio=1
-        elif event.key=='m':
+            self.accumulator=0
+            self.previous=time.monotonic()
+        elif key=='m':
             modes=['flightpath','legacy','off']
             current=self.core.state['controller']
             self.core.command('controller '+modes[(modes.index(current)+1)%3])
-        elif event.key=='f2':
+        elif key=='f2':
             ids=[c['id'] for c in self.core.state['cells'] if c['node']==2][:8]
             for id_ in ids:self.core.command(f'damage cell {id_} 0 1')
-        elif event.key=='f3':self.core.command('damage link left_aileron')
-        elif event.key=='f4':self.core.command('damage spar left_root_front .3')
-        elif event.key=='f5':self.core.command('damage link elevator')
-        elif event.key=='g' and self.core.state['propeller_model']=='blade_element':self.core.command('governor '+('off' if self.core.state['governor'] else 'on'))
-        elif event.key=='f7':self.core.command('damage governor')
-        elif event.key=='f6':self.core.command('damage engine .5')
+        elif key=='f3':self.core.command('damage link left_aileron')
+        elif key=='f4':self.core.command('damage spar left_root_front .3')
+        elif key=='f5':self.core.command('damage link elevator')
+        elif key=='g' and self.core.state['propeller_model']=='blade_element':self.core.command('governor '+('off' if self.core.state['governor'] else 'on'))
+        elif key=='f7' and self.core.state['propeller_model']=='blade_element':self.core.command('damage governor')
+        elif key=='f6':self.core.command('damage engine .5')
 
     def advance(self,ticks):
         direct=(int('right' in self.keys)-int('left' in self.keys),
@@ -75,16 +142,23 @@ class Viewer:
         active=tuple(any(k in self.keys for k in pair) for pair in [('left','right'),('up','down'),('q','e')])
         throttle=max(0,min(1,self.core.state['throttle']+.2*ticks/120*(int('w' in self.keys)-int('s' in self.keys))))
         self.prop_rpm_ratio=max(.5,min(1.1,self.prop_rpm_ratio+.15*ticks/120*(int('pageup' in self.keys)-int('pagedown' in self.keys))))
-        return self.core.step(ticks,aim=self.aim,direct=direct,active=active,throttle=throttle,prop_rpm_ratio=self.prop_rpm_ratio)
+        trim=list(self.core.state['trim'])
+        for axis,(minus,plus) in enumerate([('j','l'),('k','i'),('u','o')]):
+            trim[axis]=max(-.9,min(.9,trim[axis]+.15*ticks/120*(int(plus in self.keys)-int(minus in self.keys))))
+        return self.core.step(ticks,aim=self.aim,direct=direct,active=active,throttle=throttle,trim=trim,prop_rpm_ratio=self.prop_rpm_ratio)
 
-    def frame(self,_):
-        now=time.monotonic()
-        if not self.paused:self.accumulator+=now-self.previous
+    def frame(self,_,now=None):
+        now=time.monotonic() if now is None else now
+        if self.paused:
+            self.accumulator=0
+        else:
+            # Presentation stalls slow wall-time playback rather than creating a catch-up backlog.
+            self.accumulator+=min(.1,max(0,now-self.previous))
+            ticks=min(12,int((self.accumulator+1e-10)*120))
+            if ticks:
+                self.advance(ticks)
+                self.accumulator-=ticks/120
         self.previous=now
-        ticks=min(120,int(self.accumulator*120))
-        if ticks:
-            self.advance(ticks)
-            self.accumulator-=ticks/120
         self.draw()
 
     def draw(self):
@@ -124,17 +198,128 @@ class Viewer:
         self.structure.set(xlim=(0,3),xlabel='Applied equivalent stress / ultimate stress')
         self.structure.set_title('Independent structural graph · strain drives failure',fontsize=10,color='white')
         for axis in [self.flight,self.aim_axis,self.structure]:
-            axis.tick_params(colors='white')
-            axis.xaxis.label.set_color('white')
-            axis.yaxis.label.set_color('white')
-        self.flight.zaxis.label.set_color('white')
+            color='#20354a' if axis is self.flight else 'white'
+            axis.tick_params(colors=color)
+            axis.xaxis.label.set_color(color)
+            axis.yaxis.label.set_color(color)
+        self.flight.zaxis.label.set_color('#20354a')
         owners=' / '.join(f'{a}: {o["direct_weight"]:.2f}' for a,o in zip(('roll','pitch','yaw'),s['ownership']))
         surfaces=' '.join(f'{c["name"]}={math.degrees(c["deflection"]):+.1f}°' for c in s['chains'])
         speed=math.sqrt(sum((v-w)**2 for v,w in zip(s['velocity'],s['wind'])))
-        self.hud.set_text(f'{s["propeller_model"]}/{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
-                          f'Prop pitch={math.degrees(s["prop_pitch"]):.1f}° target={s["target_rpm"]:.0f}rpm limited={s["governor_saturated"]} tipMach={s["tip_mach"]:.2f}   Direct: {owners}\nSurfaces: {surfaces}\n'
-                          'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   Space: pause   R: reset   M: controller\n'
+        self.hud.set_text(f'{"PAUSED · Space resumes" if self.paused else "RUNNING"}  {s["propeller_model"]}/{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
+                          f'Trim (roll/pitch/yaw)={s["trim"][0]:+.3f}/{s["trim"][1]:+.3f}/{s["trim"][2]:+.3f}  Prop pitch={math.degrees(s["prop_pitch"]):.1f}° target={s["target_rpm"]:.0f}rpm limited={s["governor_saturated"]} tipMach={s["tip_mach"]:.2f}   Direct: {owners}\nSurfaces: {surfaces}\n'
+                          'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   I/K: pitch trim   J/L: roll trim   U/O: yaw trim\n'
+                          'Space: pause/resume   R: reset   M: controller   Loss of canvas focus/pointer pauses and releases input\n'
                           'F2: left skin loss   F3: left aileron cable   F4: spar section 30%   F5: elevator cable   F6: half power   G: governor   F7: pitch jam   PgUp/Dn: RPM request')
+
+
+def delivery_checks(viewer):
+    """Real Matplotlib callbacks → live C++ transport; no mock flight model."""
+    from matplotlib.backend_bases import Event, KeyEvent
+    import json
+    core=viewer.core
+    def press(key,native=None):
+        KeyEvent('key_press_event',viewer.fig.canvas,key=key,guiEvent=native)._process()
+    def release(key,native=None):
+        KeyEvent('key_release_event',viewer.fig.canvas,key=key,guiEvent=native)._process()
+    def tap(key):
+        press(key);release(key)
+    tap('r')
+    assert all(not v for k,v in viewer.plt.rcParams.items() if k.startswith('keymap.'))
+    for key in ['left','right','up','down','q','e']:press(key)
+    state=viewer.advance(1)
+    assert all(o['direct_weight']==1 and o['command']==0 for o in state['ownership'])
+    release('left');state=viewer.advance(1)
+    assert state['ownership'][0]['command']==1 and state['ownership'][0]['direct_weight']==1
+    for key in ['right','up','down','q','e']:release(key)
+    viewer.advance(32)
+    assert all(o['direct_weight']==0 for o in core.state['ownership'])
+    original_mode=core.state['controller']
+    press('m');mode=core.state['controller'];press('m')
+    assert mode!=original_mode and core.state['controller']==mode
+    release('m');core.command('controller flightpath')
+    if core.state['propeller_model']=='blade_element':
+        before=core.state['governor'];press('g');press('g')
+        assert core.state['governor']!=before
+        release('g');tap('g');assert core.state['governor']==before
+    # All knobs share the actual core intent, and opposing knobs request no change.
+    base=core.state
+    for key in ['w','s','i','k','j','l','u','o','pageup','pagedown']:press(key)
+    state=viewer.advance(12)
+    assert state['throttle']==base['throttle'] and state['trim']==base['trim']
+    for key in ['s','k','j','u','pagedown']:release(key)
+    state=viewer.advance(60)
+    assert state['throttle']>base['throttle'] and all(a>b for a,b in zip(state['trim'],base['trim']))
+    if state['propeller_model']=='blade_element':assert state['target_rpm']>base['target_rpm']
+    viewer.keys.add('left');viewer.aim=(0,1,0);viewer.accumulator=.003
+    tap('r');reset=core.state
+    assert not viewer.keys and viewer.accumulator==0 and viewer.aim==(1,0,0) and viewer.prop_rpm_ratio==1
+    press('left');assert 'left' not in viewer.keys
+    state=viewer.advance(1)
+    assert all(o['direct_weight']==0 for o in state['ownership']) and state['trim']==reset['trim'] and state['throttle']==reset['throttle']
+    for key in list(viewer.blocked_keys):release(key)
+    press('left');viewer.advance(1)
+    assert core.state['ownership'][0]['command']==-1
+    # Focus loss freezes time and clears input; release/resume returns through core handoff.
+    before=core.state['tick']
+    Event('figure_leave_event',viewer.fig.canvas)._process()
+    assert viewer.paused and not viewer.keys
+    viewer.frame(None,viewer.previous+5)
+    assert core.state['tick']==before
+    release('left');press('space');press('space')
+    assert not viewer.paused
+    release('space');viewer.previous=0
+    viewer.frame(None,viewer.previous+1/120)
+    assert core.state['tick']==before+1
+    viewer.frame(None,viewer.previous+1/120)
+    assert core.state['tick']==before+2 and core.state['ownership'][0]['direct_weight']<1
+    viewer.advance(32);assert core.state['ownership'][0]['direct_weight']==0
+    # No fractional pause residue or catch-up burst; every physical step remains 1/120 s.
+    viewer.accumulator=.003;tap('space');before=core.state['tick']
+    viewer.frame(None,viewer.previous+20);assert core.state['tick']==before
+    tap('space');viewer.previous=0
+    viewer.frame(None,viewer.previous+1/240);assert core.state['tick']==before
+    viewer.frame(None,viewer.previous+1/240);assert core.state['tick']==before+1
+    before=core.state['tick'];viewer.frame(None,viewer.previous+30)
+    assert core.state['tick']==before+12 and abs(viewer.accumulator)<1/120
+    viewer.frame(None,viewer.previous);assert core.state['tick']==before+12
+    # Exercise native repeat coalescing with a real headless Tcl idle queue, when available.
+    tk_repeat=None
+    try:
+        import tkinter
+        from types import SimpleNamespace
+        widget=tkinter.Tcl()
+    except ImportError:
+        widget=None
+    if widget is not None:
+        viewer.tk_widget=widget
+        press('space',SimpleNamespace(time=10));paused=viewer.paused
+        release('space',SimpleNamespace(time=11));press('space',SimpleNamespace(time=11))
+        widget.eval('update idletasks');assert viewer.paused==paused
+        release('space',SimpleNamespace(time=12));widget.eval('update idletasks')
+        press('space',SimpleNamespace(time=13));assert viewer.paused!=paused
+        release('space',SimpleNamespace(time=14));widget.eval('update idletasks')
+        viewer.tk_widget=None;tk_repeat=True
+    # Pointer exit must not turn a held/repeating Space into an automatic resume.
+    press('space');Event('figure_leave_event',viewer.fig.canvas)._process();press('space')
+    assert viewer.paused
+    release('space');tap('space');assert not viewer.paused
+    tap('r');before=core.state['shaft_power']
+    tap('f5');tap('f6');viewer.advance(1)
+    assert not next(c for c in core.state['chains'] if c['name']=='elevator')['connected']
+    assert core.state['shaft_power']<before*.75
+    if core.state['propeller_model']=='blade_element':
+        tap('f7');assert core.state['pitch_jammed']
+    tap('space');tap('r');assert viewer.paused
+    tap('space');assert not viewer.paused
+    assert all(c['connected'] for c in core.state['chains']) and all(c['area_fraction']==1 for c in core.state['cells'])
+    assert all(e['section']==1 and not e['failed'] for e in core.state['edges']) and not core.state['pitch_jammed']
+    report={'backend':'Agg','core':'live C++ 120 Hz','propeller_model':core.state['propeller_model'],'human_gui_verified':False,
+            'checks':{'shortcut_conflicts':True,'opposing_keys_per_axis':True,'action_press_repeat':True,
+                      'throttle_trim_rpm_inputs':True,'reset_clears_and_blocks_held_input':True,
+                      'focus_loss_releases_and_pauses':True,'pause_resume_fixed_ticks_no_backlog':True,
+                      'damage_reset_controls':True},'native_tk_repeat_idle_queue':tk_repeat}
+    (ROOT/'results'/('viewer-input-summary'+('-legacy' if core.state['propeller_model']=='legacy' else '')+'.json')).write_text(json.dumps(report,indent=2)+'\n')
 
 
 def smoke(core,plt):
@@ -189,12 +374,14 @@ def smoke(core,plt):
         core.command('governor off')
         assert core.command('reset')['governor'] is False
         core.command('governor on')
+    delivery_checks(viewer)
     viewer.draw()
-    output=ROOT/'results'/'viewer-smoke.png'
+    viewer.fig.text(.99,.97,'OFFLINE AGG INPUT TEST · HUMAN GUI NOT VERIFIED',ha='right',color='white',fontsize=9)
+    output=ROOT/'results'/('viewer-smoke'+('-legacy' if core.state['propeller_model']=='legacy' else '')+'.png')
     output.parent.mkdir(exist_ok=True)
     viewer.fig.savefig(output,dpi=120,facecolor=viewer.fig.get_facecolor())
     plt.close(viewer.fig)
-    print(f'PASS: live intent, per-axis handoff, cell/link/spar injection, telemetry and Agg rendering → {output}')
+    print(f'PASS: live intent, key conflicts/repeat, focus/reset/pause, trim/prop/damage, fixed ticks and Agg render → {output}')
 
 
 def main():
@@ -210,15 +397,14 @@ def main():
     import matplotlib
     if args.smoke:matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    for key in ('quit','fullscreen','home','back','forward','pan','zoom','save'):
-        plt.rcParams['keymap.'+key]=[]
+    configure_keymaps(plt)
     with CoreClient(args.airframe) as core:
         core.command('controller '+args.controller)
         if args.smoke:
             smoke(core,plt)
         else:
-            if 'agg' == matplotlib.get_backend().lower():
-                raise SystemExit('No interactive display backend. Run locally with Tk/Qt, or use --smoke in Cloud.')
+            if matplotlib.get_backend().lower()!='tkagg':
+                raise SystemExit('This delivery uses TkAgg focus handling. Start with MPLBACKEND=TkAgg on a desktop with Tk, or use --smoke in Cloud.')
             from matplotlib.animation import FuncAnimation
             viewer=Viewer(core,plt)
             animation=FuncAnimation(viewer.fig,viewer.frame,interval=33,cache_frame_data=False)
