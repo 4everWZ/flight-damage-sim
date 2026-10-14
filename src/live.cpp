@@ -1,0 +1,172 @@
+#include "flight/core.hpp"
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+using namespace flight;
+namespace {
+void vec(Vec v) { std::cout << '[' << v.x << ',' << v.y << ',' << v.z << ']'; }
+void snapshot(const Simulation &s, const PilotIntent &p) {
+  std::cout << std::setprecision(12) << "{\"tick\":" << s.tick
+            << ",\"dt\":" << s.dt << ",\"position\":";
+  vec(s.body.position);
+  std::cout << ",\"wind\":";
+  vec(s.wind_world);
+  std::cout << ",\"velocity\":";
+  vec(s.body.velocity);
+  std::cout << ",\"omega\":";
+  vec(s.body.omega);
+  auto q = s.body.attitude;
+  std::cout << ",\"quaternion\":[" << q.w << ',' << q.x << ',' << q.y << ','
+            << q.z << "],\"cg\":";
+  vec(s.mass.cg);
+  std::cout << ",\"mass\":" << s.mass.mass << ",\"g\":" << s.load_factor
+            << ",\"rpm\":" << s.def.engine.rpm
+            << ",\"thrust\":" << s.def.engine.thrust
+            << ",\"throttle\":" << p.throttle << ",\"trim\":[" << p.trim[0]
+            << ',' << p.trim[1] << ',' << p.trim[2] << "],\"desired_rates\":";
+  vec(s.instructor.desired_rates);
+  std::cout << ",\"ownership\":[";
+  for (int i = 0; i < 3; ++i) {
+    if (i)
+      std::cout << ',';
+    std::cout << "{\"command\":" << s.ownership[i].command
+              << ",\"direct_weight\":" << s.ownership[i].direct_weight << '}';
+  }
+  std::cout << "],\"chains\":[";
+  for (std::size_t i = 0; i < s.def.chains.size(); ++i) {
+    auto &c = s.def.chains[i];
+    if (i)
+      std::cout << ',';
+    std::cout << "{\"name\":" << std::quoted(c.name)
+              << ",\"connected\":" << (c.connected ? "true" : "false")
+              << ",\"deflection\":" << c.deflection << '}';
+  }
+  std::cout << "],\"cells\":[";
+  for (std::size_t i = 0; i < s.def.cells.size(); ++i) {
+    auto &c = s.def.cells[i];
+    if (i)
+      std::cout << ',';
+    std::cout << "{\"id\":" << c.id << ",\"node\":" << c.node
+              << ",\"plane\":" << c.plane << ",\"position\":";
+    vec(c.position);
+    std::cout << ",\"flow\":";
+    vec(c.flow);
+    std::cout << ",\"force\":";
+    vec(c.force);
+    std::cout << ",\"attached\":" << (c.attached ? "true" : "false")
+              << ",\"area_fraction\":" << c.area_fraction
+              << ",\"alpha\":" << c.alpha << ",\"q\":" << c.q
+              << ",\"stall\":" << c.stall << '}';
+  }
+  std::cout << "],\"edges\":[";
+  for (std::size_t i = 0; i < s.def.edges.size(); ++i) {
+    auto &e = s.def.edges[i];
+    if (i)
+      std::cout << ',';
+    std::cout << "{\"name\":" << std::quoted(e.name)
+              << ",\"section\":" << e.remaining_section
+              << ",\"stiffness_fraction\":" << e.stiffness()
+              << ",\"bending_Nm\":" << e.bend_load
+              << ",\"torsion_Nm\":" << e.twist_load
+              << ",\"ultimate_utilization\":" << e.utilization
+              << ",\"plastic_strain\":" << e.plastic_strain
+              << ",\"failed\":" << (e.failed ? "true" : "false") << '}';
+  }
+  std::cout << "],\"debris\":" << s.debris.size() << "}\n" << std::flush;
+}
+} // namespace
+int main(int argc, char **argv) {
+  try {
+    if (argc != 2)
+      throw std::runtime_error("usage: flight-live AIRFRAME");
+    auto fixture = Definition::load(argv[1]);
+    Simulation s(fixture);
+    auto tr = s.trim(70, 1000);
+    PilotIntent p = tr.intent;
+    p.mouse = true;
+    snapshot(s, p);
+    std::string line;
+    while (std::getline(std::cin, line)) {
+      try {
+        std::istringstream input(line);
+        std::string op;
+        input >> op;
+        if (op == "quit")
+          break;
+        if (op == "reset") {
+          s = Simulation(fixture);
+          tr = s.trim(70, 1000);
+          p = tr.intent;
+          p.mouse = true;
+        } else if (op == "step") {
+          int steps, mouse, r, pitch, yaw;
+          PilotIntent next;
+          input >> steps >> next.aim_world.x >> next.aim_world.y >>
+              next.aim_world.z >> mouse >> next.direct[0] >> next.direct[1] >>
+              next.direct[2] >> r >> pitch >> yaw >> next.throttle >>
+              next.trim[0] >> next.trim[1] >> next.trim[2];
+          if (!input || steps < 0 || steps > 120 ||
+              !std::isfinite(norm(next.aim_world)) ||
+              norm(next.aim_world) < 1e-9)
+            throw std::runtime_error("invalid step input");
+          for (double v : next.direct)
+            if (!std::isfinite(v))
+              throw std::runtime_error("non-finite direct input");
+          for (double v : next.trim)
+            if (!std::isfinite(v))
+              throw std::runtime_error("non-finite trim");
+          if (!std::isfinite(next.throttle))
+            throw std::runtime_error("non-finite throttle");
+          next.mouse = mouse;
+          next.active = {bool(r), bool(pitch), bool(yaw)};
+          p = next;
+          for (int i = 0; i < steps; ++i)
+            s.step(p);
+        } else if (op == "damage") {
+          std::string target, name;
+          input >> target;
+          if (target == "cell") {
+            int id;
+            double area, roughness;
+            input >> id >> area >> roughness;
+            if (!input || !std::isfinite(area) || !std::isfinite(roughness))
+              throw std::runtime_error("invalid cell damage");
+            s.damage_cell(id, area, roughness);
+          } else if (target == "spar") {
+            double section;
+            input >> name >> section;
+            if (!input || !std::isfinite(section))
+              throw std::runtime_error("invalid section");
+            s.weaken(name, section);
+          } else if (target == "link") {
+            input >> name;
+            if (!input)
+              throw std::runtime_error("missing link");
+            s.disconnect(name);
+          } else if (target == "engine" || target == "prop") {
+            double fraction;
+            input >> fraction;
+            if (!input || !std::isfinite(fraction) || fraction < 0 ||
+                fraction > 1)
+              throw std::runtime_error("invalid propulsion fraction");
+            if (target == "engine")
+              s.def.engine.power_fraction = fraction;
+            else
+              s.def.engine.prop_fraction = fraction;
+          } else
+            throw std::runtime_error("unknown damage target");
+          s.evaluate(s.body, true);
+        } else
+          throw std::runtime_error("unknown command");
+        snapshot(s, p);
+      } catch (const std::exception &e) {
+        std::cout << "{\"error\":" << std::quoted(std::string(e.what()))
+                  << "}\n"
+                  << std::flush;
+      }
+    }
+  } catch (const std::exception &e) {
+    std::cerr << e.what() << '\n';
+    return 1;
+  }
+}

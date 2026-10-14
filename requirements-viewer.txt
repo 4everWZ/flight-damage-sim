@@ -1,0 +1,2 @@
+# Optional engineering viewer; headless experiments need only g++/make/Python stdlib.
+matplotlib>=3.6,<4
