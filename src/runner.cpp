@@ -28,7 +28,26 @@ void row(std::ostream &out, const Simulation &s) {
   out << ',' << s.def.engine.rpm << ',' << s.def.engine.thrust << ','
       << s.aero.force.z << ',' << s.aero.moment.x << ',' << max_u << ','
       << failed << ',' << s.debris.size() << ',' << s.mass.mass << ','
-      << stalled << '\n';
+      << stalled;
+  Vec air_world = s.body.velocity - s.wind_world;
+  Vec down = s.body.attitude.conjugate().rotate({0, 0, 1});
+  out << ',' << std::atan2(-air_world.z, std::hypot(air_world.x, air_world.y))
+      << ',' << std::atan2(down.y, down.z) << ',' << s.instructor.desired_bank
+      << ',' << s.instructor.desired_normal_g << ','
+      << s.instructor.flight_path_error;
+  for (double rate :
+       {s.instructor.desired_rates.x, s.instructor.desired_rates.y,
+        s.instructor.desired_rates.z})
+    out << ',' << rate;
+  for (bool sat : s.instructor.saturated)
+    out << ',' << sat;
+  out << ',' << std::atan2(air_world.y, air_world.x) << ','
+      << std::atan2(vb.y, std::hypot(vb.x, vb.z));
+  for (double bias : s.instructor.rate_bias)
+    out << ',' << bias;
+  for (bool paused : s.instructor.integral_paused)
+    out << ',' << paused;
+  out << '\n';
 }
 void debug(const Simulation &s, const std::string &prefix) {
   std::ofstream c(prefix + ".cells.csv");
@@ -53,8 +72,10 @@ void debug(const Simulation &s, const std::string &prefix) {
 int main(int argc, char **argv) {
   try {
     if (argc < 4) {
-      std::cerr << "usage: flight-run AIRFRAME SCENARIO OUTPUT_PREFIX [hz=120] "
-                   "[seconds=10]\n";
+      std::cerr
+          << "usage: flight-run AIRFRAME SCENARIO OUTPUT_PREFIX [hz=120] "
+             "[seconds=10] [controller=flightpath|flightpath-p|legacy|off] "
+             "[bank_deg=40]\n";
       return 2;
     }
     std::string scenario = argv[2], prefix = argv[3];
@@ -73,12 +94,32 @@ int main(int argc, char **argv) {
                                          "weakened_pull",
                                          "highspeed_pull",
                                          "highspeed_weakened",
-                                         "stall"};
+                                         "stall",
+                                         "mouse_damaged",
+                                         "mouse_disconnected",
+                                         "mouse_climb",
+                                         "mouse_circle",
+                                         "mouse_circle_damaged"};
     if (std::find(names.begin(), names.end(), scenario) == names.end() ||
         hz <= 0 || seconds <= 0 || !std::isfinite(hz) ||
         !std::isfinite(seconds) || seconds * hz > 10000000)
       throw std::runtime_error("invalid scenario or duration");
     Simulation s(Definition::load(argv[1]), 1 / hz);
+    std::string controller = argc > 6 ? argv[6] : "flightpath";
+    if (controller == "legacy")
+      s.instructor_mode = InstructorMode::Legacy;
+    else if (controller == "off")
+      s.instructor_mode = InstructorMode::Off;
+    else if (controller == "flightpath-p")
+      s.guidance.rate_integral = false;
+    else if (controller != "flightpath")
+      throw std::runtime_error("unknown controller");
+    if (argc > 7) {
+      double bank = std::stod(argv[7]);
+      if (!std::isfinite(bank) || bank < 5 || bank > 75)
+        throw std::runtime_error("invalid bank limit");
+      s.guidance.max_bank = rad(bank);
+    }
     auto trim = s.trim(
         scenario == "highspeed_pull" || scenario == "highspeed_weakened" ? 140
                                                                          : 70,
@@ -87,7 +128,11 @@ int main(int argc, char **argv) {
     std::cout << std::setprecision(12) << "trim_residual=" << trim.residual
               << " alpha=" << trim.alpha << " throttle=" << p.throttle
               << " roll_trim=" << p.trim[0] << " pitch_trim=" << p.trim[1]
-              << " yaw_trim=" << p.trim[2] << "\n";
+              << " yaw_trim=" << p.trim[2]
+              << " force_residual_N=" << norm(trim.force_residual_N)
+              << " moment_residual_Nm=" << norm(trim.moment_residual_Nm)
+              << " rotor_accel=" << trim.rotor_acceleration
+              << " converged=" << trim.converged << "\n";
     if (scenario == "structure") {
       s.weaken("left_root_front", .30);
       std::vector<double> b(s.def.nodes.size()), t(b.size());
@@ -123,10 +168,17 @@ int main(int argc, char **argv) {
         << "time,x,y,altitude,speed,alpha,heading,p,q,r,g,roll_cmd,roll_owner,"
            "pitch_cmd,pitch_owner,yaw_cmd,yaw_owner,left_aileron,right_aileron,"
            "elevator,rudder,rpm,thrust,lift_z,roll_moment,max_utilization,"
-           "failed,debris,mass,stalled\n";
+           "failed,debris,mass,stalled,path_angle,bank,desired_bank,desired_g,"
+           "path_error,desired_p,desired_q,desired_r,roll_saturated,pitch_"
+           "saturated,yaw_saturated,air_heading,beta,roll_bias,pitch_bias,yaw_"
+           "bias,roll_integral_paused,pitch_integral_paused,yaw_integral_"
+           "paused\n";
     bool damaged = false;
     p.mouse = scenario == "mouse" || scenario == "mixed" ||
-              scenario == "compensate" || scenario == "weakened_pull";
+              scenario == "compensate" || scenario == "weakened_pull" ||
+              scenario == "mouse_damaged" || scenario == "mouse_disconnected" ||
+              scenario == "mouse_climb" || scenario == "mouse_circle" ||
+              scenario == "mouse_circle_damaged";
     if (scenario == "stall") {
       s.body.velocity = {40, 0, 0};
       s.evaluate(s.body, true);
@@ -172,7 +224,24 @@ int main(int argc, char **argv) {
         p.active[Pitch] = time >= 1 && time < 8;
         p.direct[Pitch] = time < 4 ? 1 : -1;
       }
-      if (scenario == "mouse")
+      if (time >= 1 && !damaged &&
+          (scenario == "mouse_damaged" || scenario == "mouse_circle_damaged")) {
+        int count = 0;
+        for (auto &c : s.def.cells)
+          if (c.node == 2 && count++ < 8)
+            s.damage_cell(c.id, 0, 1);
+        damaged = true;
+      }
+      if (time >= 1 && !damaged && scenario == "mouse_disconnected") {
+        s.disconnect("elevator");
+        damaged = true;
+      }
+      if (scenario == "mouse_circle" || scenario == "mouse_circle_damaged")
+        p.aim_world = {std::cos(.08 * time), std::sin(.08 * time), 0};
+      if (scenario == "mouse_climb")
+        p.aim_world = {std::cos(rad(8)), 0, -std::sin(rad(8))};
+      if (scenario == "mouse" || scenario == "mouse_damaged" ||
+          scenario == "mouse_disconnected")
         p.aim_world = {0, 1, 0};
       if (scenario == "mixed") {
         p.aim_world = {1, .12, -.02};

@@ -208,6 +208,8 @@ Simulation::Simulation(Definition d, double timestep)
   std::vector<int> nodes(def.nodes.size());
   std::iota(nodes.begin(), nodes.end(), 0);
   mass = properties(def, nodes);
+  for (auto &axis : ownership)
+    axis.release_elapsed = def.handoff;
   node_bending.resize(nodes.size());
   node_torsion.resize(nodes.size());
 }
@@ -223,22 +225,95 @@ void Simulation::update_controls(const PilotIntent &p) {
   Vec vb = body.attitude.conjugate().rotate(body.velocity - wind_world);
   double speed = std::max(norm(vb), 15.), alpha = std::atan2(vb.z, vb.x),
          beta = std::atan2(vb.y, std::hypot(vb.x, vb.z));
-  instructor.desired_bank = clamp(1.2 * heading_error, -rad(65), rad(65));
-  instructor.desired_rates = {
-      clamp(2. * (instructor.desired_bank - bank), -1.4, 1.4),
-      clamp(1.3 * (pitch_error + alpha) +
-                gravity / speed * (1. / std::max(std::cos(bank), .4) - 1),
-            -.6, .6),
-      clamp(.4 * heading_error - 1.5 * beta, -.4, .4)};
+  if (instructor_mode == InstructorMode::Legacy) {
+    instructor.desired_bank = clamp(1.2 * heading_error, -rad(65), rad(65));
+    instructor.desired_rates = {
+        clamp(2. * (instructor.desired_bank - bank), -1.4, 1.4),
+        clamp(1.3 * (pitch_error + alpha) +
+                  gravity / speed * (1. / std::max(std::cos(bank), .4) - 1),
+              -.6, .6),
+        clamp(.4 * heading_error - 1.5 * beta, -.4, .4)};
+  } else if (instructor_mode == InstructorMode::FlightPath) {
+    // Aim is an air-relative flight-path direction in world coordinates, not a
+    // nose attitude or altitude target.
+    Vec air_world = body.velocity - wind_world, aim = unit(p.aim_world);
+    double heading = std::atan2(air_world.y, air_world.x),
+           desired_heading = std::atan2(aim.y, aim.x);
+    double path =
+        std::atan2(-air_world.z, std::hypot(air_world.x, air_world.y));
+    double desired_path = std::atan2(-aim.z, std::hypot(aim.x, aim.y));
+    double error = std::atan2(std::sin(desired_heading - heading),
+                              std::cos(desired_heading - heading));
+    instructor.flight_path_error = desired_path - path;
+    double heading_rate = guidance.heading_gain * error;
+    instructor.desired_bank = clamp(std::atan(speed * heading_rate / gravity),
+                                    -guidance.max_bank, guidance.max_bank);
+    double bank_support = std::max(std::cos(bank), .3);
+    instructor.desired_normal_g =
+        clamp((std::cos(path) + speed * guidance.path_gain *
+                                    instructor.flight_path_error / gravity) /
+                  bank_support,
+              -.5, 5.);
+    // A normal-load loop requests body rate; the actuator and damaged
+    // aerodynamics must supply it.
+    double theta_rate =
+        guidance.normal_gain * (instructor.desired_normal_g - load_factor);
+    Vec forward = body.attitude.rotate({1, 0, 0});
+    double theta = std::atan2(-forward.z, std::hypot(forward.x, forward.y));
+    double turn_rate =
+        gravity / speed * std::tan(clamp(bank, -rad(75), rad(75)));
+    double bank_error = std::atan2(std::sin(instructor.desired_bank - bank),
+                                   std::cos(instructor.desired_bank - bank));
+    instructor.desired_rates = {
+        clamp(2 * bank_error - turn_rate * std::sin(theta), -1.4, 1.4),
+        clamp(theta_rate * std::cos(bank) +
+                  turn_rate * std::sin(bank) * std::cos(theta),
+              -.6, .6),
+        clamp(-theta_rate * std::sin(bank) +
+                  turn_rate * std::cos(bank) * std::cos(theta) + 1.2 * beta,
+              -.4, .4)};
+  } else {
+    instructor.desired_rates = {};
+    instructor.desired_bank = 0;
+    instructor.desired_normal_g = 0;
+    instructor.flight_path_error = 0;
+  }
   if (alpha > rad(13))
     instructor.desired_rates.y =
         std::min(instructor.desired_rates.y, -2 * (alpha - rad(13)));
   std::array<double, 3> gains{.9, 1.4, 1.0};
   for (int axis = 0; axis < 3; ++axis) {
-    double ic = p.mouse ? clamp(gains[axis] * (instructor.desired_rates[axis] -
-                                               body.omega[axis]),
-                                -1, 1)
-                        : 0;
+    double error = instructor.desired_rates[axis] - body.omega[axis];
+    bool available = false;
+    for (std::size_t id = 0; id < def.chains.size(); ++id) {
+      const auto &chain = def.chains[id];
+      if (chain.axis == axis && chain.connected && !chain.jammed &&
+          chain.range > 0 && chain.hinge > 0) {
+        for (const auto &cell : def.cells)
+          if (cell.chain == int(id) && cell.attached && cell.area_fraction > 0)
+            available = true;
+      }
+    }
+    double raw = gains[axis] * error + instructor.rate_bias[axis];
+    bool pause = !guidance.rate_integral || !p.mouse || p.active[axis] ||
+                 ownership[axis].direct_weight > .01 || !available ||
+                 (raw >= 1 && error > 0) || (raw <= -1 && error < 0) ||
+                 (axis == Pitch && alpha > rad(13) && error > 0);
+    instructor.integral_paused[axis] = pause;
+    if (instructor_mode == InstructorMode::FlightPath &&
+        guidance.rate_integral) {
+      constexpr std::array<double, 3> integral_gain{.8, 1.2, .5};
+      if (!pause)
+        instructor.rate_bias[axis] =
+            clamp(instructor.rate_bias[axis] + integral_gain[axis] * error * dt,
+                  -.9, .9);
+    } else
+      instructor.rate_bias[axis] = 0;
+    raw = p.mouse && instructor_mode != InstructorMode::Off
+              ? gains[axis] * error + instructor.rate_bias[axis]
+              : 0;
+    instructor.saturated[axis] = std::abs(raw) >= 1;
+    double ic = clamp(raw, -1, 1);
     instructor.command[axis] = ic;
     auto &a = ownership[axis];
     if (p.active[axis]) {
@@ -303,7 +378,8 @@ void Simulation::update_engine(const PilotIntent &p) {
   double prop_q =
       e.cq * density * n * n * std::pow(diameter, 5) * e.prop_fraction;
   double engine_q = e.shaft_power / std::max(omega, 20.);
-  omega = std::max(0., omega + (engine_q - prop_q) * dt / e.rotor_inertia);
+  e.acceleration = (engine_q - prop_q) / e.rotor_inertia;
+  omega = std::max(0., omega + e.acceleration * dt);
   e.rpm = omega * 60 / (2 * pi);
   n = e.rpm / 60;
   J = v / std::max(n * diameter, 1.);
@@ -332,14 +408,21 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
     }
     double speed = norm(local), q = .5 * rho * speed * speed;
     Vec drag_dir = -unit(local);
-    double raw_alpha = c.plane == 0 ? std::atan2(local.z, local.x)
-                                    : std::atan2(local.y, local.x);
+    // Project into the actual flexed cell basis. Lift remains perpendicular to
+    // local flow.
+    Quat incidence = c.plane == 0 ? Quat::axis({0, 1, 0}, c.incidence)
+                                  : Quat::axis({0, 0, 1}, -c.incidence);
+    Quat frame = Quat::axis({1, 0, 0}, def.nodes[c.node].bend) *
+                 Quat::axis({0, 1, 0}, def.nodes[c.node].twist) * incidence;
+    Vec chord = frame.rotate({1, 0, 0});
+    Vec span = frame.rotate(c.plane == 0 ? Vec{0, 1, 0} : Vec{0, 0, -1});
+    Vec normal = frame.rotate(c.plane == 0 ? Vec{0, 0, 1} : Vec{0, 1, 0});
+    double raw_alpha = std::atan2(dot(local, normal), dot(local, chord));
     double deflection = c.chain >= 0
                             ? def.chains[c.chain].deflection *
                                   def.chains[c.chain].hinge * c.control_sign
                             : 0;
-    double alpha = raw_alpha + c.incidence + def.nodes[c.node].twist +
-                   c.control_gain * deflection;
+    double alpha = raw_alpha + c.control_gain * deflection;
     auto coeff = lookup(def, c, alpha);
     double mach = speed / 340.;
     double compression = 1. / std::sqrt(std::max(1 - mach * mach, .35));
@@ -349,14 +432,10 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
     // Gap drag persists on the missing skin footprint, independently of its
     // lost lifting area.
     double drag = q * (effective_area * coeff.cd + c.area * c.roughness * .08);
-    Vec lift_dir = c.plane == 0 ? unit(Vec{local.z, 0, -local.x})
-                                : unit(Vec{local.y, -local.x, 0});
-    if (c.plane == 0)
-      lift_dir = Quat::axis({1, 0, 0}, def.nodes[c.node].bend).rotate(lift_dir);
+    Vec lift_dir = unit(cross(span, local));
     Vec force = lift_dir * lift + drag_dir * drag;
-    Vec moment = c.plane == 0
-                     ? Vec{0, q * effective_area * c.chord * coeff.cm, 0}
-                     : Vec{0, 0, q * effective_area * c.chord * coeff.cm};
+    Vec moment = span * (q * effective_area * c.chord * coeff.cm *
+                         (c.plane == 0 ? 1 : -1));
     a.add(force, r, moment);
     if (store) {
       c.flow = local;
@@ -388,21 +467,40 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
 }
 void integrate_body(Body &b, const MassProperties &m, const Wrench &force,
                     double elapsed) {
-  Vec alpha =
-      m.inertia.solve(force.moment - cross(b.omega, m.inertia * b.omega));
-  Vec mid_omega = b.omega + alpha * (elapsed / 2);
-  Quat mid = (b.attitude + b.attitude *
-                               Quat{0, mid_omega.x, mid_omega.y, mid_omega.z} *
-                               (elapsed / 4))
-                 .normalized();
+  // Implicit midpoint Euler equation preserves torque-free quadratic
+  // invariants.
+  Vec next = b.omega;
+  for (int iteration = 0; iteration < 12; ++iteration) {
+    Vec midpoint = (b.omega + next) * .5, L = m.inertia * midpoint;
+    Vec residual = next - b.omega -
+                   m.inertia.solve(force.moment - cross(midpoint, L)) * elapsed;
+    if (norm(residual) < 1e-12)
+      break;
+    Mat jacobian;
+    for (int j = 0; j < 3; ++j) {
+      Vec basis;
+      basis[j] = 1;
+      Vec column = basis + m.inertia.solve(cross(basis, L) +
+                                           cross(midpoint, m.inertia * basis)) *
+                               (.5 * elapsed);
+      for (int i = 0; i < 3; ++i)
+        jacobian.a[i][j] = column[i];
+    }
+    next = next - jacobian.solve(residual);
+    if (iteration == 11)
+      throw std::runtime_error("angular midpoint did not converge");
+  }
+  Vec mid_omega = (b.omega + next) * .5;
+  // The matching Cayley increment keeps world angular momentum consistent with
+  // Euler's equation.
+  double angle = 2 * std::atan(.5 * norm(mid_omega) * elapsed);
+  Quat delta = Quat::axis(mid_omega, angle);
+  Quat mid = (b.attitude * Quat::axis(mid_omega, angle * .5)).normalized();
   Vec accel = mid.rotate(force.force) / m.mass + Vec{0, 0, gravity};
   b.position += b.velocity * elapsed + accel * (.5 * elapsed * elapsed);
   b.velocity += accel * elapsed;
-  b.attitude = (b.attitude +
-                b.attitude * Quat{0, mid_omega.x, mid_omega.y, mid_omega.z} *
-                    (elapsed / 2))
-                   .normalized();
-  b.omega += alpha * elapsed;
+  b.attitude = (b.attitude * delta).normalized();
+  b.omega = next;
 }
 void Simulation::solve_structure(const std::vector<double> &bending,
                                  const std::vector<double> &torsion,
@@ -584,19 +682,27 @@ void Simulation::reset_trim(const TrimResult &t, double speed,
   body.velocity = {speed, 0, 0};
   body.attitude =
       (orientation(t.alpha) * Quat::axis({1, 0, 0}, t.bank)).normalized();
-  for (auto &c : def.chains)
-    c.deflection = clamp(t.intent.trim[c.axis], -1, 1) * c.limit /
-                   (1 + .5 * 1.225 * std::exp(-altitude / 8500) * speed *
-                            speed / c.q_limit);
+  for (auto &c : def.chains) {
+    double command =
+        def.trim_enabled[c.axis] ? clamp(t.intent.trim[c.axis], -1, 1) : 0;
+    c.filtered = c.connected ? command * c.limit * clamp(c.range, 0, 1) : 0;
+    double q = .5 * 1.225 * std::exp(-altitude / 8500) * speed * speed;
+    c.deflection = c.filtered / (1 + q / c.q_limit);
+    if (c.jammed)
+      c.deflection = c.filtered = clamp(c.jam_position, -c.limit, c.limit);
+  }
   def.engine.throttle_state = t.intent.throttle;
   // Solve shaft/prop torque equilibrium for the trim's throttle.
   auto &e = def.engine;
   double rho = 1.225 * std::exp(-altitude / 8500), D = 2 * e.prop_radius;
-  double power =
-      e.max_power * t.intent.throttle * std::exp(-altitude / e.altitude_scale);
-  e.rpm = std::sqrt(std::max(power, 0.) * 60 /
-                    (2 * pi * e.rated_rpm * e.cq * rho * std::pow(D, 5))) *
-          60;
+  double power = e.max_power * t.intent.throttle *
+                 std::exp(-altitude / e.altitude_scale) * e.power_fraction *
+                 (e.running ? 1 : 0);
+  e.rpm = e.prop_fraction > 0 ? std::sqrt(std::max(power, 0.) * 60 /
+                                          (2 * pi * e.rated_rpm * e.cq * rho *
+                                           std::pow(D, 5) * e.prop_fraction)) *
+                                    60
+                              : e.rated_rpm;
   e.rpm = std::min(e.rpm, e.rated_rpm * 1.15);
   update_engine(t.intent);
 }
@@ -649,9 +755,19 @@ TrimResult Simulation::trim(double speed, double altitude) {
       for (int i = 0; i < 6; ++i)
         J[i][j] = (fy[i] - f[i]) / 1e-5;
     }
-    for (double &v : f)
-      v = -v;
-    auto dx = linear_solve(J, f);
+    // Regularized least squares tolerates unavailable trim axes without
+    // inventing authority.
+    std::vector<std::vector<double>> normal(6, std::vector<double>(6));
+    std::vector<double> rhs(6);
+    for (int j = 0; j < 6; ++j) {
+      for (int i = 0; i < 6; ++i) {
+        rhs[j] -= J[i][j] * f[i];
+        for (int k = 0; k < 6; ++k)
+          normal[j][k] += J[i][j] * J[i][k];
+      }
+      normal[j][j] += 1e-9;
+    }
+    auto dx = linear_solve(normal, rhs);
     for (int j = 0; j < 6; ++j)
       x[j] += clamp(dx[j], -.2, .2);
     x[0] = clamp(x[0], rad(-5), rad(13));
@@ -671,7 +787,13 @@ TrimResult Simulation::trim(double speed, double altitude) {
   out.intent.throttle = x[4];
   body.attitude =
       (orientation(x[0]) * Quat::axis({1, 0, 0}, x[5])).normalized();
-  evaluate(body, true);
+  auto actual = evaluate(body, true);
+  out.force_residual_N = actual.force + body.attitude.conjugate().rotate(
+                                            {0, 0, mass.mass * gravity});
+  out.moment_residual_Nm = actual.moment;
+  out.rotor_acceleration = def.engine.acceleration;
+  out.converged =
+      out.residual < 1e-6 && std::abs(out.rotor_acceleration) < 1e-6;
   return out;
 }
 } // namespace flight

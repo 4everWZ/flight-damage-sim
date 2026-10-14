@@ -50,6 +50,29 @@ def main():
     fig.suptitle('Measured synthetic fixture behavior · 152 cells · authoritative C++ core · 120 Hz',fontsize=13)
     output=RESULTS/'experiments.png'
     fig.savefig(output,dpi=150)
+    if (RESULTS/'instructor-summary.json').exists():
+        comparison,plots=plt.subplots(2,2,figsize=(12,8),layout='constrained')
+        for mode,label in [('legacy','legacy guidance'),('flightpath-p','new P-only'),('flightpath','new PI, 40° limit')]:
+            rows=load('mouse_'+mode)
+            time=[r['time'] for r in rows]
+            plots[0,0].plot(time,[r['altitude']-1000 for r in rows],label=label)
+            plots[0,1].plot(time,[r['air_heading']*180/3.141592653589793 for r in rows],label=label)
+        plots[0,0].set(title='Complete trajectory: height loss and recovery',xlabel='Time (s)',ylabel='Altitude change (m)')
+        plots[0,1].set(title='Actual velocity heading; 90° target',xlabel='Time (s)',ylabel='Heading (deg)')
+        for name,label in [('mouse_flightpath','clean'),('mouse_damaged_flightpath','25% left outer skin loss'),('mouse_disconnected_flightpath','elevator disconnected')]:
+            rows=load(name)
+            if name=='mouse_disconnected_flightpath':rows=[r for r in rows if r['altitude']>0]
+            plots[1,0].plot([r['time'] for r in rows],[r['altitude']-1000 for r in rows],label=label)
+        plots[1,0].axhline(-1000,color='grey',ls=':')
+        plots[1,0].text(.02,.03,'Cut trace stops at reference ground; collision pending',transform=plots[1,0].transAxes,fontsize=8)
+        plots[1,0].set(title='Damage retains real physical consequences',xlabel='Time (s)',ylabel='Altitude change (m)')
+        for bank in [40,50,60]:
+            rows=load('mouse_flightpath' if bank==40 else 'mouse_bank'+str(bank))
+            plots[1,1].plot([r['time'] for r in rows],[r['pitch_cmd'] for r in rows],label=f'{bank}° bank limit')
+        plots[1,1].set(title='Demand and normalized pitch saturation',xlabel='Time (s)',ylabel='Pitch command')
+        for ax in plots.flat:ax.grid(alpha=.2);ax.legend(fontsize=8)
+        comparison.suptitle('Same corrected dynamics · no pose/torque corrections · 120 Hz synthetic fixture')
+        comparison.savefig(RESULTS/'instructor-comparison.png',dpi=150)
     print(output)
 
 if __name__=='__main__':main()

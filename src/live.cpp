@@ -6,8 +6,12 @@ using namespace flight;
 namespace {
 void vec(Vec v) { std::cout << '[' << v.x << ',' << v.y << ',' << v.z << ']'; }
 void snapshot(const Simulation &s, const PilotIntent &p) {
-  std::cout << std::setprecision(12) << "{\"tick\":" << s.tick
-            << ",\"dt\":" << s.dt << ",\"position\":";
+  const char *mode = s.instructor_mode == InstructorMode::Off      ? "off"
+                     : s.instructor_mode == InstructorMode::Legacy ? "legacy"
+                     : s.guidance.rate_integral ? "flightpath"
+                                                : "flightpath-p";
+  std::cout << std::setprecision(12) << "{\"controller\":" << std::quoted(mode)
+            << ",\"tick\":" << s.tick << ",\"dt\":" << s.dt << ",\"position\":";
   vec(s.body.position);
   std::cout << ",\"wind\":";
   vec(s.wind_world);
@@ -25,12 +29,26 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
             << ",\"throttle\":" << p.throttle << ",\"trim\":[" << p.trim[0]
             << ',' << p.trim[1] << ',' << p.trim[2] << "],\"desired_rates\":";
   vec(s.instructor.desired_rates);
+  std::cout << ",\"desired_bank\":" << s.instructor.desired_bank
+            << ",\"desired_normal_g\":" << s.instructor.desired_normal_g
+            << ",\"path_error\":" << s.instructor.flight_path_error
+            << ",\"aero_force\":";
+  vec(s.aero.force);
+  std::cout << ",\"prop_force\":";
+  vec(s.propulsion.force);
+  std::cout << ",\"rate_bias\":[" << s.instructor.rate_bias[0] << ','
+            << s.instructor.rate_bias[1] << ',' << s.instructor.rate_bias[2]
+            << ']';
   std::cout << ",\"ownership\":[";
   for (int i = 0; i < 3; ++i) {
     if (i)
       std::cout << ',';
     std::cout << "{\"command\":" << s.ownership[i].command
-              << ",\"direct_weight\":" << s.ownership[i].direct_weight << '}';
+              << ",\"direct_weight\":" << s.ownership[i].direct_weight
+              << ",\"saturated\":"
+              << (s.instructor.saturated[i] ? "true" : "false")
+              << ",\"integral_paused\":"
+              << (s.instructor.integral_paused[i] ? "true" : "false") << '}';
   }
   std::cout << "],\"chains\":[";
   for (std::size_t i = 0; i < s.def.chains.size(); ++i) {
@@ -94,10 +112,27 @@ int main(int argc, char **argv) {
         if (op == "quit")
           break;
         if (op == "reset") {
+          auto mode = s.instructor_mode;
+          auto parameters = s.guidance;
           s = Simulation(fixture);
+          s.instructor_mode = mode;
+          s.guidance = parameters;
           tr = s.trim(70, 1000);
           p = tr.intent;
           p.mouse = true;
+        } else if (op == "controller") {
+          std::string mode;
+          input >> mode;
+          if (mode == "off")
+            s.instructor_mode = InstructorMode::Off;
+          else if (mode == "legacy")
+            s.instructor_mode = InstructorMode::Legacy;
+          else if (mode == "flightpath" || mode == "flightpath-p") {
+            s.instructor_mode = InstructorMode::FlightPath;
+            s.guidance.rate_integral = mode == "flightpath";
+          } else
+            throw std::runtime_error("unknown controller");
+          s.instructor = {};
         } else if (op == "step") {
           int steps, mouse, r, pitch, yaw;
           PilotIntent next;

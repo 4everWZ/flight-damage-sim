@@ -52,6 +52,10 @@ class Viewer:
             self.paused=not self.paused
         elif event.key=='r':
             self.core.command('reset');self.aim=(1,0,0)
+        elif event.key=='m':
+            modes=['flightpath','legacy','off']
+            current=self.core.state['controller']
+            self.core.command('controller '+modes[(modes.index(current)+1)%3])
         elif event.key=='f2':
             ids=[c['id'] for c in self.core.state['cells'] if c['node']==2][:8]
             for id_ in ids:self.core.command(f'damage cell {id_} 0 1')
@@ -107,7 +111,7 @@ class Viewer:
         self.aim_axis.set(xlim=(-180,180),ylim=(-30,45),xlabel='Aim heading (deg)',ylabel='Elevation (deg)')
         self.aim_axis.grid(alpha=.3)
         self.aim_axis.scatter([heading],[elevation],s=70,marker='+',color='#b64335')
-        self.aim_axis.set_title('Click to aim · real surfaces drive all motion',fontsize=10,color='white')
+        self.aim_axis.set_title('Aim air-path heading / elevation · actual surfaces',fontsize=10,color='white')
         self.structure.clear()
         edges=s['edges']
         self.structure.barh(range(len(edges)),[min(e['ultimate_utilization'],3) for e in edges],color=['#b64335' if e['failed'] else '#426e79' for e in edges])
@@ -123,9 +127,9 @@ class Viewer:
         owners=' / '.join(f'{a}: {o["direct_weight"]:.2f}' for a,o in zip(('roll','pitch','yaw'),s['ownership']))
         surfaces=' '.join(f'{c["name"]}={math.degrees(c["deflection"]):+.1f}°' for c in s['chains'])
         speed=math.sqrt(sum((v-w)**2 for v,w in zip(s['velocity'],s['wind'])))
-        self.hud.set_text(f't={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
+        self.hud.set_text(f'{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
                           f'Direct ownership weights: {owners}\nSurfaces: {surfaces}\n'
-                          'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   Space: pause   R: reset\n'
+                          'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   Space: pause   R: reset   M: controller\n'
                           'F2: left skin loss   F3: left aileron cable   F4: spar section 30%   F5: elevator cable   F6: half engine power')
 
 
@@ -158,6 +162,17 @@ def smoke(core,plt):
     except ValueError:
         pass
     assert core.step(0)['tick']==before
+    viewer.keys={'left'}
+    previous=core.state['rate_bias'][0]
+    s=viewer.advance(24)
+    assert s['ownership'][0]['integral_paused'] and s['rate_bias'][0]==previous
+    core.command('controller off')
+    viewer.keys=set()
+    viewer.advance(32)
+    assert all(o['command']==0 for o in core.state['ownership'])
+    core.command('controller legacy')
+    assert core.command('reset')['controller']=='legacy'
+    core.command('controller flightpath')
     viewer.draw()
     output=ROOT/'results'/'viewer-smoke.png'
     output.parent.mkdir(exist_ok=True)
@@ -169,6 +184,7 @@ def smoke(core,plt):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--smoke',action='store_true')
+    parser.add_argument('--controller',choices=['flightpath','legacy','off'],default='flightpath')
     args=parser.parse_args()
     cache=ROOT/'build'/'viewer-cache'
     cache.mkdir(parents=True,exist_ok=True)
@@ -180,6 +196,7 @@ def main():
     for key in ('quit','fullscreen','home','back','forward','pan','zoom','save'):
         plt.rcParams['keymap.'+key]=[]
     with CoreClient() as core:
+        core.command('controller '+args.controller)
         if args.smoke:
             smoke(core,plt)
         else:

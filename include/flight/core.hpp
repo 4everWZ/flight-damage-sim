@@ -59,9 +59,18 @@ struct AxisOwnership {
          last_direct = 0, command = 0;
   bool was_active = false;
 };
+enum class InstructorMode { Off, Legacy, FlightPath };
+struct GuidanceParameters {
+  bool rate_integral = true;
+  double max_bank = rad(40), heading_gain = .35, path_gain = .6,
+         normal_gain = .5;
+};
 struct InstructorState {
   Vec aim_body{}, desired_rates{};
-  double desired_bank = 0;
+  double desired_bank = 0, desired_normal_g = 1, flight_path_error = 0;
+  std::array<bool, 3> saturated{};
+  std::array<double, 3> rate_bias{};
+  std::array<bool, 3> integral_paused{};
   std::array<double, 3> command{};
 };
 struct StructuralNode {
@@ -86,6 +95,7 @@ struct Engine {
   Vec position{};
   double max_power = 0, rated_rpm = 0, prop_radius = 0, rotor_inertia = 0,
          ct = 0, cq = 0, advance_loss = 0, altitude_scale = 0, response = 0;
+  double acceleration = 0;
   double rpm = 0, throttle_state = 0, power_fraction = 1, prop_fraction = 1,
          thrust = 0, torque = 0, shaft_power = 0;
   bool running = true; // initial implementation: fixed-pitch propeller
@@ -112,6 +122,9 @@ struct DetachedBody {
 struct TrimResult {
   PilotIntent intent;
   double alpha = 0, bank = 0, residual = 0;
+  Vec force_residual_N{}, moment_residual_Nm{};
+  double rotor_acceleration = 0;
+  bool converged = false;
   int iterations = 0;
 };
 class Simulation {
@@ -122,6 +135,8 @@ public:
   std::vector<DetachedBody> debris;
   std::array<AxisOwnership, 3> ownership;
   InstructorState instructor;
+  InstructorMode instructor_mode = InstructorMode::FlightPath;
+  GuidanceParameters guidance;
   Vec wind_world{};
   std::uint64_t tick = 0;
   double dt = 1. / 120;
