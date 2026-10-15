@@ -4,7 +4,7 @@ CPPFLAGS += -Iinclude
 CORE = src/core.cpp src/propeller.cpp
 
 .PHONY: all test clean
-all: build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe
+all: build/aerodynamics-tests build/sensitivity-probe build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe
 
 build:
 	mkdir -p build
@@ -42,7 +42,14 @@ build/control-tests: $(CORE) tests/control_tests.cpp include/flight/core.hpp inc
 build/control-probe: $(CORE) tests/control_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/control_probe.cpp -o $@
 
+build/aerodynamics-tests: $(CORE) tests/aerodynamics_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/aerodynamics_tests.cpp -o $@
+
+build/sensitivity-probe: $(CORE) tests/sensitivity_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/sensitivity_probe.cpp -o $@
+
 test: all
+	./build/aerodynamics-tests data/validation-material.airframe
 	./build/core-tests data/validation.airframe
 	./build/mechanics-review data/validation.airframe
 	./build/propeller-tests data/validation-bem.airframe

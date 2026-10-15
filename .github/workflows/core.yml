@@ -62,4 +62,5 @@ jobs:
           path: |
             results/control-summary.json
             results/control-sensitivity.csv
+            results/sensitivity-isolation.txt
           if-no-files-found: error

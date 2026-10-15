@@ -2,6 +2,7 @@
 #include "math.hpp"
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 namespace flight {
@@ -157,13 +158,19 @@ struct Definition {
 };
 void integrate_body(Body &, const MassProperties &, const Wrench &,
                     double elapsed);
+// State-dependent loads are solved with the rigid state, at the same midpoint.
+using BodyLoad = std::function<Wrench(const Body &)>;
+void integrate_body(Body &, const MassProperties &, const BodyLoad &,
+                    double elapsed);
+using RotorAirframeLoad =
+    std::function<Wrench(const Body &, const PropellerLoads &)>;
 struct RotorStep {
   double engine_work = 0, external_work = 0, prop_loss = 0;
   Vec impulse_world{};
 };
 RotorStep integrate_rotor_body(Body &, const MassProperties &, Engine &,
                                const Wrench &aero, Vec wind, double density,
-                               double dt);
+                               double dt, const RotorAirframeLoad & = {});
 double mechanical_energy(const Body &, const MassProperties &, const Engine &);
 Vec total_angular_momentum(const Body &, const MassProperties &,
                            const Engine &);
@@ -222,8 +229,10 @@ public:
   std::vector<double> node_bending, node_torsion;
 
 private:
+  Wrench evaluate_airframe(const Body &, double wake, bool store);
+  Wrench detached_load(DetachedBody &, const Body &, bool store);
   void update_engine(const PilotIntent &);
-  void assemble_structural_loads(const Wrench &);
+  void assemble_structural_loads(const Wrench &, Vec rates, double spin);
   void update_mass_and_detach();
 };
 } // namespace flight
