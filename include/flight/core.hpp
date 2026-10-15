@@ -164,10 +164,19 @@ RotorStep integrate_rotor_body(Body &, const MassProperties &, Engine &,
 double mechanical_energy(const Body &, const MassProperties &, const Engine &);
 Vec total_angular_momentum(const Body &, const MassProperties &,
                            const Engine &);
+struct DetachedCell {
+  AeroCell cell;
+  Quat frame; // Frozen elastic/incidence basis at separation, in piece body
+              // axes.
+};
 struct DetachedBody {
   Body state;
   MassProperties mass;
-  std::vector<int> cells, nodes;
+  std::vector<int> cells, nodes; // Original definition indices, for provenance.
+  std::vector<DetachedCell> aero_cells;
+  std::vector<ControlChain>
+      chains; // Local unpowered/jammed surfaces; no pilot link.
+  Wrench aero{};
 };
 struct TrimResult {
   PilotIntent intent;
@@ -197,6 +206,7 @@ public:
   void step(const PilotIntent &input);
   Wrench evaluate(const Body &b, bool store = false);
   void update_controls(const PilotIntent &input);
+  Wrench evaluate_detached(DetachedBody &, bool store = true);
   void solve_structure(const std::vector<double> &bending,
                        const std::vector<double> &torsion, double elapsed);
   void damage_cell(int id, double area_fraction, double roughness);

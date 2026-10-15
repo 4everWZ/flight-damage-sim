@@ -90,6 +90,19 @@ def main():
         for ax in plots.flat:ax.grid(alpha=.2);ax.legend(fontsize=8)
         rotor.suptitle('Synthetic signed blade model · finite pitch governor · overspeed is numerical evidence, not transonic fidelity')
         rotor.savefig(RESULTS/'rotor-governor.png',dpi=150)
+    if (RESULTS/'detached-flight.csv').exists():
+        rows=load('detached-flight')
+        fig,axes=plt.subplots(1,2,figsize=(12,4),layout='constrained')
+        t=[r['time'] for r in rows]
+        axes[0].plot(t,[-r['z'] for r in rows],label='own cell aerodynamics')
+        axes[0].plot(t,[-r['ballistic_z'] for r in rows],ls='--',label='ballistic counterfactual')
+        axes[0].set(xlabel='Simulation time (s)',ylabel='Altitude (m)',title='Same separation state; actual forces change continuation')
+        for key in ['p','q','r']:
+            axes[1].plot(t,[r[key]*180/3.141592653589793 for r in rows],label=key)
+        axes[1].set(xlabel='Simulation time (s)',ylabel='Body rate (deg/s)',title='Detached wing integrates its own moment and inertia')
+        for ax in axes:ax.legend(fontsize=8);ax.grid(alpha=.2)
+        fig.suptitle('C++ 120 Hz · load-driven graph failure · synthetic airframe · no collision / secondary fracture')
+        fig.savefig(RESULTS/'detached-flight.png',dpi=150)
     print(output)
 
 if __name__=='__main__':main()
