@@ -103,7 +103,52 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
               << ",\"plastic_strain\":" << e.plastic_strain
               << ",\"failed\":" << (e.failed ? "true" : "false") << '}';
   }
-  std::cout << "],\"debris\":" << s.debris.size() << "}\n" << std::flush;
+  std::cout << "],\"debris\":" << s.debris.size() << ",\"detached\":[";
+  for (std::size_t i = 0; i < s.debris.size(); ++i) {
+    if (i)
+      std::cout << ',';
+    const auto &piece = s.debris[i];
+    std::cout << "{\"mass\":" << piece.mass.mass << ",\"cg\":";
+    vec(piece.mass.cg);
+    std::cout << ",\"position\":";
+    vec(piece.state.position);
+    std::cout << ",\"velocity\":";
+    vec(piece.state.velocity);
+    std::cout << ",\"omega\":";
+    vec(piece.state.omega);
+    auto q = piece.state.attitude;
+    std::cout << ",\"quaternion\":[" << q.w << ',' << q.x << ',' << q.y << ','
+              << q.z << "]";
+    std::cout << ",\"aero_force\":";
+    vec(piece.aero.force);
+    std::cout << ",\"aero_moment\":";
+    vec(piece.aero.moment);
+    std::cout << ",\"chains\":[";
+    for (std::size_t j = 0; j < piece.chains.size(); ++j) {
+      if (j)
+        std::cout << ',';
+      const auto &c = piece.chains[j];
+      std::cout << "{\"name\":" << std::quoted(c.name)
+                << ",\"connected\":" << (c.connected ? "true" : "false")
+                << ",\"jammed\":" << (c.jammed ? "true" : "false")
+                << ",\"deflection\":" << c.deflection << '}';
+    }
+    std::cout << "],\"cells\":[";
+    for (std::size_t j = 0; j < piece.aero_cells.size(); ++j) {
+      if (j)
+        std::cout << ',';
+      const auto &c = piece.aero_cells[j].cell;
+      std::cout << "{\"id\":" << c.id
+                << ",\"area_fraction\":" << c.area_fraction << ",\"flow\":";
+      vec(c.flow);
+      std::cout << ",\"force\":";
+      vec(c.force);
+      std::cout << ",\"alpha\":" << c.alpha << ",\"q\":" << c.q
+                << ",\"deflection\":" << c.deflection << '}';
+    }
+    std::cout << "]}";
+  }
+  std::cout << "]}\n" << std::flush;
 }
 } // namespace
 int main(int argc, char **argv) {

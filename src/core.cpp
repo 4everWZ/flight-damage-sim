@@ -78,6 +78,47 @@ CurvePoint lookup(const Definition &d, const AeroCell &c, double alpha) {
   return {alpha, lo->cl + w * (upper->cl - lo->cl),
           lo->cd + w * (upper->cd - lo->cd), lo->cm + w * (upper->cm - lo->cm)};
 }
+Quat cell_frame(const Definition &def, const AeroCell &c) {
+  Quat incidence = c.plane == 0 ? Quat::axis({0, 1, 0}, c.incidence)
+                                : Quat::axis({0, 0, 1}, -c.incidence);
+  return Quat::axis({1, 0, 0}, def.nodes[c.node].bend) *
+         Quat::axis({0, 1, 0}, def.nodes[c.node].twist) * incidence;
+}
+Wrench cell_load(const Definition &def, AeroCell &c, Vec local, Vec r,
+                 double rho, Quat frame, double deflection, bool store) {
+  double speed = norm(local), q = .5 * rho * speed * speed;
+  Vec drag_dir = -unit(local);
+  Vec chord = frame.rotate({1, 0, 0});
+  Vec span = frame.rotate(c.plane == 0 ? Vec{0, 1, 0} : Vec{0, 0, -1});
+  Vec normal = frame.rotate(c.plane == 0 ? Vec{0, 0, 1} : Vec{0, 1, 0});
+  double raw_alpha = std::atan2(dot(local, normal), dot(local, chord));
+  double alpha = raw_alpha + c.control_gain * deflection;
+  auto coeff = lookup(def, c, alpha);
+  double mach = speed / 340.;
+  double compression = 1. / std::sqrt(std::max(1 - mach * mach, .35));
+  double effective_area = c.area * c.area_fraction;
+  double lift = q * effective_area * coeff.cl * c.lift_efficiency * compression;
+  // Gap drag persists on the missing skin footprint, independently of its
+  // lost lifting area.
+  double drag = q * (effective_area * coeff.cd + c.area * c.roughness * .08);
+  Vec lift_dir = unit(cross(span, local));
+  Vec force = lift_dir * lift + drag_dir * drag;
+  Vec moment = span * (q * effective_area * c.chord * coeff.cm *
+                       (c.plane == 0 ? 1 : -1));
+  Wrench result;
+  result.add(force, r, moment);
+  if (store) {
+    c.flow = local;
+    c.alpha = alpha;
+    c.beta = std::atan2(local.y, std::hypot(local.x, local.z));
+    c.q = q;
+    c.stall = std::abs(alpha) > rad(15) ? 1 : 0;
+    c.force = force;
+    c.moment = moment;
+    c.deflection = deflection;
+  }
+  return result;
+}
 Quat orientation(double alpha) { return Quat::axis({0, 1, 0}, alpha); }
 } // namespace
 Definition Definition::load(const std::string &path) {
@@ -509,47 +550,14 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
     double flow_sign = (dot(vb, def.engine.axis) + wake) >= 0 ? 1 : -1;
     if (along * flow_sign < 0 && side < def.engine.prop_radius)
       local += def.engine.axis * wake;
-    double speed = norm(local), q = .5 * rho * speed * speed;
-    Vec drag_dir = -unit(local);
-    // Project into the actual flexed cell basis. Lift remains perpendicular to
-    // local flow.
-    Quat incidence = c.plane == 0 ? Quat::axis({0, 1, 0}, c.incidence)
-                                  : Quat::axis({0, 0, 1}, -c.incidence);
-    Quat frame = Quat::axis({1, 0, 0}, def.nodes[c.node].bend) *
-                 Quat::axis({0, 1, 0}, def.nodes[c.node].twist) * incidence;
-    Vec chord = frame.rotate({1, 0, 0});
-    Vec span = frame.rotate(c.plane == 0 ? Vec{0, 1, 0} : Vec{0, 0, -1});
-    Vec normal = frame.rotate(c.plane == 0 ? Vec{0, 0, 1} : Vec{0, 1, 0});
-    double raw_alpha = std::atan2(dot(local, normal), dot(local, chord));
     double deflection = c.chain >= 0
                             ? def.chains[c.chain].deflection *
                                   def.chains[c.chain].hinge * c.control_sign
                             : 0;
-    double alpha = raw_alpha + c.control_gain * deflection;
-    auto coeff = lookup(def, c, alpha);
-    double mach = speed / 340.;
-    double compression = 1. / std::sqrt(std::max(1 - mach * mach, .35));
-    double effective_area = c.area * c.area_fraction;
-    double lift =
-        q * effective_area * coeff.cl * c.lift_efficiency * compression;
-    // Gap drag persists on the missing skin footprint, independently of its
-    // lost lifting area.
-    double drag = q * (effective_area * coeff.cd + c.area * c.roughness * .08);
-    Vec lift_dir = unit(cross(span, local));
-    Vec force = lift_dir * lift + drag_dir * drag;
-    Vec moment = span * (q * effective_area * c.chord * coeff.cm *
-                         (c.plane == 0 ? 1 : -1));
-    a.add(force, r, moment);
-    if (store) {
-      c.flow = local;
-      c.alpha = alpha;
-      c.beta = std::atan2(local.y, std::hypot(local.x, local.z));
-      c.q = q;
-      c.stall = std::abs(alpha) > rad(15) ? 1 : 0;
-      c.force = force;
-      c.moment = moment;
-      c.deflection = deflection;
-    }
+    auto cell =
+        cell_load(def, c, local, r, rho, cell_frame(def, c), deflection, store);
+    a.force += cell.force;
+    a.moment += cell.moment;
   }
   a.add(-unit(vb) * (.5 * rho * dot(vb, vb) * def.body_drag_area), -mass.cg);
   if (def.engine.model == PropellerModel::Legacy) {
@@ -808,6 +816,7 @@ void Simulation::update_mass_and_detach() {
     piece.state.position += body.attitude.rotate(offset);
     piece.state.velocity += body.attitude.rotate(cross(body.omega, offset));
     piece.nodes = group;
+    std::vector<int> source_chains;
     for (int id : group) {
       def.nodes[id].attached = false;
       newly.erase(std::remove(newly.begin(), newly.end(), id), newly.end());
@@ -815,6 +824,20 @@ void Simulation::update_mass_and_detach() {
     for (int i = 0; i < int(def.cells.size()); ++i)
       if (std::find(group.begin(), group.end(), def.cells[i].node) !=
           group.end()) {
+        AeroCell local = def.cells[i];
+        if (local.chain >= 0) {
+          auto found = std::find(source_chains.begin(), source_chains.end(),
+                                 local.chain);
+          if (found == source_chains.end()) {
+            source_chains.push_back(local.chain);
+            auto surface = def.chains[local.chain];
+            surface.connected = false;
+            piece.chains.push_back(surface);
+            local.chain = int(piece.chains.size()) - 1;
+          } else
+            local.chain = int(found - source_chains.begin());
+        }
+        piece.aero_cells.push_back({local, cell_frame(def, def.cells[i])});
         def.cells[i].attached = false;
         def.cells[i].force = {};
         def.cells[i].moment = {};
@@ -822,7 +845,19 @@ void Simulation::update_mass_and_detach() {
         def.cells[i].stall = 0;
         piece.cells.push_back(i);
       }
+    evaluate_detached(
+        piece); // Initial diagnostics only; no extra physical tick.
     debris.push_back(piece);
+  }
+  // Only chains with surviving cells retain a pilot path. Shared chains may
+  // have an attached branch plus an independently unpowered branch on a piece.
+  for (std::size_t id = 0; id < def.chains.size(); ++id) {
+    bool has_surface = std::any_of(
+        def.cells.begin(), def.cells.end(), [&](const AeroCell &cell) {
+          return cell.attached && cell.chain == int(id);
+        });
+    if (!has_surface)
+      def.chains[id].connected = false;
   }
   mass = properties(def, still);
   Vec offset = mass.cg - old_cg;
@@ -830,6 +865,28 @@ void Simulation::update_mass_and_detach() {
   body.velocity += body.attitude.rotate(cross(body.omega, offset));
   // Every piece inherits the pre-separation rigid velocity field; aggregate
   // linear/angular momentum is conserved at the split.
+}
+Wrench Simulation::evaluate_detached(DetachedBody &piece, bool store) {
+  Vec vb = piece.state.attitude.conjugate().rotate(piece.state.velocity -
+                                                   wind_world);
+  double rho = 1.225 * std::exp(piece.state.position.z / 8500.);
+  Wrench result;
+  for (auto &element : piece.aero_cells) {
+    auto &cell = element.cell;
+    Vec r = cell.position - piece.mass.cg;
+    Vec local = vb + cross(piece.state.omega, r);
+    double angle = cell.chain >= 0
+                       ? piece.chains[cell.chain].deflection *
+                             piece.chains[cell.chain].hinge * cell.control_sign
+                       : 0;
+    auto load =
+        cell_load(def, cell, local, r, rho, element.frame, angle, store);
+    result.force += load.force;
+    result.moment += load.moment;
+  }
+  if (store)
+    piece.aero = result;
+  return result;
 }
 void Simulation::assemble_structural_loads(const Wrench &forces) {
   std::fill(node_bending.begin(), node_bending.end(), 0);
@@ -874,11 +931,30 @@ void Simulation::step(const PilotIntent &p) {
   update_controls(p);
   auto forces = evaluate(body, true);
   assemble_structural_loads(forces);
-  // Existing detached pieces advance once; new pieces inherit the end-of-tick
-  // state. Per-piece aero evaluation is a later task; currently pieces coast
-  // ballistically.
-  for (auto &d : debris)
-    integrate_body(d.state, d.mass, Wrench{}, dt);
+  // Existing pieces advance once from their OWN velocity/CG/rates and cells.
+  // New pieces inherit the end-of-tick rigid state and start next tick.
+  for (auto &piece : debris) {
+    Vec v = piece.state.velocity - wind_world;
+    double rho = 1.225 * std::exp(piece.state.position.z / 8500.);
+    double q = .5 * rho * dot(v, v);
+    for (auto &chain : piece.chains) {
+      if (chain.jammed) {
+        chain.deflection = chain.filtered =
+            clamp(chain.jam_position, -chain.limit, chain.limit);
+      } else {
+        // Same reduced neutral relaxation as a disconnected parent linkage.
+        chain.filtered =
+            chain.lag > 0 ? chain.filtered * std::exp(-dt / chain.lag) : 0;
+        double effort = 1 / (1 + q / chain.q_limit);
+        double travel =
+            chain.slew * effort * dt / (1 + std::max(chain.friction, 0.));
+        chain.deflection +=
+            clamp(chain.filtered * effort - chain.deflection, -travel, travel);
+      }
+    }
+    auto load = evaluate_detached(piece);
+    integrate_body(piece.state, piece.mass, load, dt);
+  }
   if (def.engine.model == PropellerModel::Legacy)
     integrate_body(body, mass, forces, dt);
   else
@@ -896,6 +972,13 @@ void Simulation::damage_cell(int id, double area, double roughness) {
     throw std::runtime_error("unknown cell");
   c->area_fraction = clamp(area, 0, 1);
   c->roughness = std::max(roughness, 0.);
+  if (!c->attached)
+    for (auto &piece : debris)
+      for (auto &element : piece.aero_cells)
+        if (element.cell.id == id) {
+          element.cell.area_fraction = c->area_fraction;
+          element.cell.roughness = c->roughness;
+        }
 }
 void Simulation::weaken(const std::string &name, double section) {
   auto e = std::find_if(def.edges.begin(), def.edges.end(),

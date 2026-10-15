@@ -4,7 +4,7 @@ A renderer-free C++20 prototype for WWII-style propeller-aircraft flight, mixed 
 
 The first synthetic fixture has 152 aerodynamic cells, 6 structural nodes with front/rear/skin load paths, and independent damaged control chains. Mouse aim and keyboard requests reach actual control surfaces; forces and moments drive 6DoF motion at 120 Hz. Structural section/stiffness and load exposure cause redistribution and delayed failure. Separation follows graph disconnection and updates mass, CG and inertia.
 
-This is a measured first slice, **not completed v0.1 or a historically validated aircraft**. No HP, direct attitude control or scripted wing destruction substitutes for physics. Known limits include reduced structural statics/material law, ballistic detached pieces, uncalibrated blade/engine data and basic Instructor guidance.
+This is a measured first slice, **not completed v0.1 or a historically validated aircraft**. No HP, direct attitude control or scripted wing destruction substitutes for physics. Known limits include reduced structural statics/material law, frozen detached geometry, uncalibrated blade/engine data and basic Instructor guidance.
 
 ## Run
 
@@ -15,6 +15,7 @@ python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
 python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
+python3 tools/detachment_experiments.py  # owned-cell piece flight and control partition
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
@@ -34,7 +35,7 @@ MPLBACKEND=TkAgg .venv-viewer/bin/python tools/viewer.py  # desktop Python with 
 
 On Windows PowerShell, follow the [native startup commands](docs/viewer-operations.md#windows-powershell), which build the viewer with MinGW `g++` and use `.venv-viewer/Scripts/python.exe`. The bash commands above are not PowerShell commands. The same manual includes expected observations for each desktop check and the full automated regression sequence for a bash/GNU make environment.
 
-The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. The current review milestone stops here; the next required check is desktop human operation, not automatic expansion into a full game.
+The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. The user merged the reviewed slice and resumed bounded core iterations. Desktop handling checks remain separate from automatic physics evidence.
 
 ## Minimal integration boundary
 
@@ -70,6 +71,6 @@ The independent mechanics review found and repaired torque-free rotation drift, 
 - [Backend/viewer research](docs/research/engine-options-research.md)
 - [Repository-local APEX installation](.agents/skills/README.md)
 
-C++ owns the only simulation. Python drives/analyses that core. JSBSim remains an optional future reference; FlightGear remains an optional future viewer. The current viewer is a debugging tool, not the finished playable prototype.
+C++ owns the only simulation. Python drives/analyses that core. JSBSim remains an optional future reference; FlightGear remains an optional future viewer. The current viewer is a debugging tool, not the finished playable prototype. Detached bodies now integrate owned-cell aerodynamics and unpowered/jammed surfaces; per-body/cell diagnostics are in the additive `detached` live field. The viewer still draws parent geometry.
 
 No project distribution license has been selected. Vendored APEX skills retain their own MIT license.
