@@ -497,6 +497,235 @@ void load_age_experiment(const Definition &d, const std::string &prefix) {
       std::cout << '\n';
     }
 }
+
+struct ClockConfig {
+  std::string name;
+  int internal_hz, sensor_hz, output_hz, force_age_ticks;
+};
+struct SensorPacket {
+  Body body;
+  double fz = 0, density = 0;
+  long long tick = 0, force_tick = 0;
+  LoadRead read{};
+};
+struct ClockRun {
+  AgedRun native_error;
+  AgedRun anchor_error;
+  int reads = 0, updates = 0, outputs = 0;
+  double max_packet_age = 0, max_force_age = 0, max_output_hold = 0;
+};
+void require_identity(const AgedRun &r, const char *message) {
+  if (std::max({r.pos, r.vel, r.rates, r.att, r.g, r.command, r.bias, r.weight,
+                r.end, r.applied}) > 1e-10 ||
+      r.pauses)
+    throw std::runtime_error(message);
+}
+ClockRun clock_loop(const Definition &d, const ClockConfig &cfg, int removed,
+                    const History *native, std::ofstream &trace) {
+  constexpr int hz = 960;
+  for (int rate : {cfg.internal_hz, cfg.sensor_hz, cfg.output_hz})
+    if (rate <= 0 || hz % rate)
+      throw std::runtime_error("clock must divide physical rate");
+  Simulation plant(d, 1. / hz), controller(d, 1. / cfg.internal_hz);
+  auto tr = plant.trim(70, 1000);
+  controller.trim(70, 1000);
+  auto p = tr.intent;
+  p.mouse = true;
+  p.aim_world = {1, .3, 0};
+  double initial = plant.aero.force.z;
+  // The initial cache is known at t=0, in addition to the declared constant
+  // prehistory. A fast sensor with the long age explicitly reads this anchor.
+  std::vector<ForceSample> samples{{0, initial}};
+  SensorPacket packet;
+  Axis3 applied{}, before{}, error{};
+  ClockRun out;
+  auto &r = out.native_error;
+  int computed_tick = -1, output_tick = -1;
+  for (int i = 0; i < 5 * hz; ++i) {
+    if (removed && i == hz)
+      plant.remove_material("left_outer_forward", .2);
+    bool read_event = i % (hz / cfg.sensor_hz) == 0;
+    bool update_event = i % (hz / cfg.internal_hz) == 0;
+    bool output_event = i % (hz / cfg.output_hz) == 0;
+    if (read_event) {
+      packet.body = plant.body;
+      packet.density = 1.225 * std::exp(plant.body.position.z / 8500.);
+      packet.tick = i;
+      packet.force_tick = 2LL * i - cfg.force_age_ticks;
+      packet.read = delayed(samples, packet.force_tick, initial);
+      if (packet.read.right >= 2LL * i)
+        throw std::runtime_error("noncausal clocked sensor read");
+      packet.fz = packet.read.fz;
+      ++out.reads;
+    }
+    double normal = -packet.fz / (plant.mass.mass * gravity);
+    if (update_event) {
+      before = controller.instructor.rate_bias;
+      controller.body = packet.body;
+      controller.density = packet.density;
+      controller.load_factor = normal;
+      p.active[Roll] = i >= hz && i < 2 * hz;
+      p.direct[Roll] = 1;
+      controller.update_controls(p);
+      computed_tick = i;
+      ++out.updates;
+      for (int a = 0; a < 3; ++a)
+        error[a] =
+            controller.instructor.desired_rates[a] - controller.body.omega[a];
+      out.max_packet_age =
+          std::max(out.max_packet_age, (i - packet.tick) / double(hz));
+      out.max_force_age = std::max(out.max_force_age,
+                                   (2LL * i - packet.force_tick) / (2. * hz));
+    }
+    if (output_event) {
+      for (int a = 0; a < 3; ++a)
+        applied[a] = controller.ownership[a].command;
+      output_tick = i;
+      ++out.outputs;
+    }
+    out.max_output_hold =
+        std::max(out.max_output_hold, (i - output_tick) / double(hz));
+    // Output rows reconstruct the entire applied waveform. Short internal
+    // windows also expose sample/hold and update ordering before feedback has
+    // diverged, and around the common material/key boundaries.
+    bool window =
+        i < 8 || (i >= hz && i < hz + 8) || (i >= 2 * hz && i < 2 * hz + 8);
+    if (output_event || (update_event && window)) {
+      trace << cfg.name << ',' << removed << ',' << i << ',' << i / double(hz)
+            << ',' << read_event << ',' << update_event << ',' << output_event
+            << ',' << packet.tick << ',' << packet.force_tick << ','
+            << packet.read.left << ',' << packet.read.right << ','
+            << computed_tick << ',' << packet.fz << ',' << plant.mass.mass
+            << ',' << normal;
+      for (int a = 0; a < 3; ++a)
+        trace << ',' << controller.ownership[a].command;
+      for (double v : applied)
+        trace << ',' << v;
+      for (double v : before)
+        trace << ',' << v;
+      for (double v : controller.instructor.rate_bias)
+        trace << ',' << v;
+      for (double v : error)
+        trace << ',' << v;
+      for (bool v : controller.instructor.integral_paused)
+        trace << ',' << v;
+      for (int a = 0; a < 3; ++a)
+        trace << ',' << controller.ownership[a].direct_weight;
+      trace << '\n';
+    }
+    if (native) {
+      const auto &s = native->samples[i];
+      compare_body(plant.body, s.body, r);
+      r.g = std::max(r.g, std::abs(normal - s.load));
+      r.command = std::max(r.command, maxdiff(applied, s.command));
+      for (int a = 0; a < 3; ++a) {
+        r.bias = std::max(
+            r.bias, std::abs(controller.instructor.rate_bias[a] - s.bias[a]));
+        r.weight =
+            std::max(r.weight, std::abs(controller.ownership[a].direct_weight -
+                                        s.weight[a]));
+        r.pauses += controller.instructor.integral_paused[a] != s.paused[a];
+      }
+    }
+    auto held = tr.intent;
+    held.active = {true, true, true};
+    held.direct = applied;
+    plant.step(held);
+    samples.push_back({2LL * i + 1, plant.aero.force.z});
+    for (const auto &node : plant.def.nodes)
+      if (!node.attached)
+        throw std::runtime_error(
+            "clock fixture changed available control topology");
+    if (native) {
+      const auto &s = native->samples[i];
+      for (size_t j = 0; j < plant.def.chains.size(); ++j) {
+        r.end = std::max(
+            r.end, std::abs(plant.def.chains[j].deflection - s.surfaces[j]));
+        r.applied =
+            std::max(r.applied, std::abs(applied_sample(plant.def.chains[j]) -
+                                         s.applied[j]));
+      }
+    }
+  }
+  r.body = plant.body;
+  if (native) {
+    compare_body(r.body, native->final, r);
+    require_identity(r, "clock closure lost default 960 Hz identity");
+  }
+  return out;
+}
+void clock_experiment(const Definition &d, const std::string &prefix) {
+  verify_delayed_samples();
+  auto anchor = delayed({{0, -7}, {1, -9}}, 0, -7);
+  if (anchor.fz != -7 || anchor.left != 0 || anchor.right != 0)
+    throw std::runtime_error("known initial force anchor missing");
+  std::ofstream trace(prefix + "-trace.csv"),
+      reference_trace(prefix + "-age-reference.csv");
+  if (!trace || !reference_trace)
+    throw std::runtime_error("cannot write clock traces");
+  trace << std::setprecision(17)
+        << "arm,case,tick,time,read_event,update_event,output_event,sensor_"
+           "tick,force_half_tick,left_half_tick,right_half_tick,computed_tick,"
+           "raw_fz,mass,normal_g";
+  for (const char *group : {"computed", "applied", "bias_before", "bias_after",
+                            "error", "paused", "weight"})
+    for (const char *axis : {"roll", "pitch", "yaw"})
+      trace << ',' << group << '_' << axis;
+  trace << '\n';
+  reference_trace << std::setprecision(17)
+                  << "case,hz,control_time,force_time,left_time,right_time,raw_"
+                     "fz,mass,normal_g,plant_cache_g,prehistory\n";
+  std::array<History, 2> fine{record(d, 960, 0), record(d, 960, 1)};
+  for (int hz : {120, 240, 960})
+    for (int removed : {0, 1}) {
+      auto body =
+          hz == 960 ? fine[removed].final : record(d, hz, removed).final;
+      std::cout << "native " << removed << ' ' << hz << " x " << body.position.x
+                << " y " << body.position.y << " z " << body.position.z << '\n';
+    }
+  for (auto cfg :
+       {ClockConfig{"A", 120, 120, 120, 8}, ClockConfig{"B", 960, 120, 120, 8},
+        ClockConfig{"C", 960, 960, 120, 8}, ClockConfig{"D", 960, 960, 960, 8},
+        ClockConfig{"E", 960, 960, 960, 1}, ClockConfig{"F", 240, 240, 240, 4}})
+    for (int removed : {0, 1}) {
+      const History *native = cfg.name == "E" ? &fine[removed] : nullptr;
+      auto r = clock_loop(d, cfg, removed, native, trace);
+      if (cfg.name == "A") {
+        auto previous = aged_loop(d, 960, removed, nullptr, reference_trace);
+        compare_body(r.native_error.body, previous.body, r.anchor_error);
+        require_identity(
+            r.anchor_error,
+            "coarse clock anchor changed the previous fixed-age loop");
+      }
+      std::cout << "clock " << cfg.name << ' ' << removed << " x "
+                << r.native_error.body.position.x << " y "
+                << r.native_error.body.position.y << " z "
+                << r.native_error.body.position.z << " internal_hz "
+                << cfg.internal_hz << " sensor_hz " << cfg.sensor_hz
+                << " output_hz " << cfg.output_hz << " force_age_s "
+                << cfg.force_age_ticks / 1920. << " reads " << r.reads
+                << " updates " << r.updates << " outputs " << r.outputs
+                << " max_packet_hold_s " << r.max_packet_age
+                << " max_force_age_at_update_s " << r.max_force_age
+                << " max_output_hold_s " << r.max_output_hold
+                << " native_identity_checked " << (native ? 1 : 0);
+      if (native) {
+        const auto &e = r.native_error;
+        std::cout << " position_error " << e.pos << " velocity_error " << e.vel
+                  << " rates_error " << e.rates << " attitude_error " << e.att
+                  << " load_error " << e.g << " request_error " << e.command
+                  << " bias_error " << e.bias << " ownership_error " << e.weight
+                  << " surface_end_error " << e.end << " surface_force_error "
+                  << e.applied << " pause_mismatches " << e.pauses;
+      }
+      if (cfg.name == "A")
+        std::cout << " anchor_position_error " << r.anchor_error.pos
+                  << " anchor_velocity_error " << r.anchor_error.vel
+                  << " anchor_rates_error " << r.anchor_error.rates
+                  << " anchor_attitude_error " << r.anchor_error.att;
+      std::cout << '\n';
+    }
+}
 void write_body(std::ostream &o, const Body &b) {
   for (Vec v : {b.position, b.velocity, b.omega})
     o << v.x << ' ' << v.y << ' ' << v.z << ' ';
@@ -603,7 +832,7 @@ int main(int argc, char **argv) {
   try {
     if (argc != 4)
       throw std::runtime_error(
-          "airframe output-prefix record|replay|age required");
+          "airframe output-prefix record|replay|age|clock required");
     auto d = Definition::load(argv[1]);
     std::string prefix = argv[2], mode = argv[3];
     auto name = [&](int hz, int c) {
@@ -611,6 +840,11 @@ int main(int argc, char **argv) {
              ".txt";
     };
     std::cout << std::setprecision(15);
+    if (mode == "clock") {
+      std::cout << std::setprecision(17);
+      clock_experiment(d, prefix);
+      return 0;
+    }
     if (mode == "age") {
       std::cout << std::setprecision(17);
       load_age_experiment(d, prefix);
