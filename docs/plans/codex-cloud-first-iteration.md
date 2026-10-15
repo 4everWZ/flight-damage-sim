@@ -1,68 +1,68 @@
-# Codex Cloud: first implementation handoff
+# Codex Cloud: core implementation plan
 
-## Goal and environment
+## Goal
 
-Develop the flight-control, aerodynamic, and damage simulation core in the dedicated Codex Cloud environment for `4everWZ/flight-damage-sim`. Start from the restored design rather than recreating a thinner design from a summary. Do not use an unrelated repository or saved environment.
+Complete and review a buildable core-first foundation for `4everWZ/flight-damage-sim`, then improve it toward the preserved [original v0.1 specification](../spec/flight-sim-core-v0.1.original.md). [Current decisions](../decisions/current-decisions.md) own implementation rationale, measured evidence and model uncertainty. Preserve the original document unchanged.
 
-Read these documents first:
+## Working state
 
-1. `docs/decisions/current-decisions.md`
-2. `docs/sources/user-requirements.md`
-3. The complete `docs/spec/flight-sim-core-v0.1.original.md`
-4. `docs/research/engine-options-research.md`
+The core/Instructor and signed-propulsion iterations, with a Matplotlib engineering viewer, are implemented on `feature/headless-core-harness`. Work stays within this repository. A temporary remote-write pause was explicitly lifted after the parent confirmed the earlier cancellation was a platform bug. Main contains the original design checkpoint; development must remain on this feature branch with a draft PR and no auto-merge.
 
-Inspect existing repository instructions and relevant `.agents/skills` through the execution environment if they are present. Read only skills relevant to this work. The historical Unity/C# suggestion is not the final technology choice; C++/Python fit should be established experimentally. The core controls, flight dynamics, and damage behavior must not be diluted for an easier demonstration.
+The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
-## First useful outcome
+## Review milestone
 
-Create a buildable, headless foundation with explicit control, aerodynamic, structural, and systems boundaries, plus one synthetic parameterized WWII-style propeller validation airframe. Deliver runnable scenarios and measured evidence. Documentation alone, a viewer moving a model, or a collection of unimplemented interfaces is not sufficient to claim the first working foundation.
+The delivery slice is ready for review once its head's CI passes: mouse/axes, throttle/trim/prop, damage, focus release, pause/reset and readable telemetry. [Viewer operations](../viewer-operations.md) own isolated startup commands and the manual checklist. Automated Agg callbacks/transport and a headless Tcl idle queue support input lifecycle; native Tk window focus, platform key repeat, realtime cadence and human handling remain unverified. Pause/reset discard clock balance, presentation stalls cap catch-up and C++ remains fixed at 120 Hz. Stop development at this milestone until review; the later core tasks below are recorded work, not authorization to expand automatically.
 
-Use a focused implementation branch and a draft PR for review. Keep changes restricted to this project. Do not merge or deploy without appropriate authorization. Do not modify or overwrite the preserved original specification.
+## Reproduce
 
-## Boundaries to establish
+```sh
+make -j2
+python3 tools/experiments.py
+python3 tools/instructor_experiments.py
+python3 tools/propulsion_experiments.py
+python3 tools/rotor_experiments.py
+python3 tools/viewer.py --smoke
+python3 tools/plot_results.py
+```
 
-- `PilotIntent`: mouse aim direction, direct pitch/roll/yaw requests, axis-active state, throttle and trim. Device keycodes stay outside the core.
-- Guidance, body-rate control, per-axis arbitration, and damaged control-chain/actuator response have distinct responsibilities. Actual surface state, not a requested attitude or artificial torque, drives the aircraft model.
-- Aircraft rigid-body state and mass properties use explicit coordinates and units. Force-at-position contributions produce a reduced force/moment only at the integration boundary.
-- Each aero cell carries geometry, local flow, aerodynamic tables, control-surface state, stall state, effective area, and damage state. Keep per-cell outputs available to structure and telemetry before summing.
-- Separate structural graph and systems graph; cell-to-structure mapping is explicit. Define how loads, stiffness/strength changes, connection failure, and geometry feedback are exchanged. Do not store a single wing-health value as the solver.
-- Fixed 120 Hz stepping, simulation-tick input/damage events, explicit seed ownership, state reset, replayable scenarios, and telemetry independent of a viewer.
-- A replaceable integration boundary must not make the distributed cells or structure graph dependent on a renderer.
+The headless path uses only GCC supporting C++20, GNU make and Python's standard library. The optional viewer/plots use Matplotlib. The [operations manual](../viewer-operations.md) contains the tested repository-local virtual environment and TkAgg startup, every input/damage command, telemetry interpretation and manual checks; Cloud uses `--smoke` instead of a GUI. Guidance and legacy propulsion comparisons remain available.
+`build/flight-run data/validation.airframe <scenario> results/<prefix> [hz=120] [seconds=10] [controller=flightpath|flightpath-p|legacy|off] [bank_deg=40]` runs a single scenario; available names are defined in `src/runner.cpp`. The experimental 240 Hz option exists for convergence. Live mode is fixed at 120 Hz. Inputs and damage commands are applied at explicit tick boundaries; viewer rendering does not alter dt.
 
-Choose practical names and serialization formats after inspecting the environment. These boundaries are behavior requirements rather than a prescription for exact class names.
+`results/summary.json`, `results/instructor-summary.json` and `results/propulsion-summary.json` and `results/rotor-summary.json` store fresh measurements and acceptance predicates; CSVs include flight, ownership, actual surfaces, stall counts and structural failure. `*.cells.csv`/`*.edges.csv` contain local end-state debug data. `experiments.png`, `instructor-comparison.png` and `rotor-governor.png` are scientific plots; `viewer-smoke.png` is a marked offline Agg rendering of live state; `viewer-input-summary.json` records input lifecycle checks with `human_gui_verified=false`. These generated results stay untracked.
 
-## Airframe and model scope
+## Original acceptance mapping
 
-The first vehicle is a generic validation fixture with data-defined geometry, mass/inertia, control surfaces, engine/propeller parameters, aerodynamic tables, and structural connections. Identify assumptions and uncertain parameters explicitly. Do not label synthetic values as measured historical aircraft data.
+| Baseline requirement | State | Evidence / next work |
+|---|---|---|
+| §4–5, 6DoF and 120 Hz | Implemented and tested | Force-at-point, ballistic energy, full-inertia free-rotation invariants/convergence, covariance and tilted simultaneous split checks |
+| §13–18, distributed/local aero | Implemented reduced model, tested | 152 cells, rotational flow, static stall entry/recovery, asymmetric and symmetric loss. Dynamic stall, flaps/slats/downwash and calibrated compressibility pending |
+| TEST-FM-001 trim | Tested | Elastic equilibrium and force/moment residual; no historical validation |
+| TEST-FM-002 elevator pull | Tested first fixture | AoA/G/energy telemetry; normal 70 m/s pull only ~1.76 G, high-speed entry reaches ~4.84 G; not a full envelope |
+| TEST-FM-003 roll | Tested first speed | Intact/damaged roll response at 70 m/s; speed sweep pending |
+| TEST-CTRL-001 90° aim | Tested basic guidance | Legacy prop variant: ~89.99° heading, ~18.6 m transient drop; signed prop: ~89.919°, ~17.074 m drop. Guidance comparisons retained |
+| TEST-CTRL-002/003 override/release | Implemented and tested | Independent ownership, configurable handoff initial state, PI freeze and release; live adapter smoke |
+| §19–22 engine/prop/trim | Partial, implemented and measured | Signed blade loads/induction, stopped drag/wind startup, coupled rotor inertia/energy/gyro, finite pitch governor/jam/travel and three trim axes. Legacy counterexamples retained. Calibrated data, feathering, richer damage/engine model pending |
+| TEST-DMG-001 aero loss | Implemented and tested | Exactly 8/32 left outer-wing cells; force/moment and flight response, Instructor compensation |
+| TEST-DMG-002 control damage | Implemented and tested disconnect | Reduced actual roll response; no Instructor bypass. Partial range/lag/friction/hinge coverage pending |
+| TEST-DMG-003 spar weakening | Implemented reduced graph and tested | Low-load bench/flight survival, redistribution, delayed coupled high-load failure; material calibration pending |
+| TEST-DMG-004 large skin loss | Partial | 25% aero loss does not detach; large-area fixture with trim difficulty pending |
+| TEST-DMG-005 critical hit | Partial | Connectivity and mass split tested; dedicated small-entry-hole/high-load scenario pending |
+| §29–30 separation/feedback | Implemented reduced model and tested | Graph connectivity, CG/full inertia and split momentum, elastic feedback. Detached-body aero/collisions pending |
+| §36–37 debugging | Partial, runnable and adapter-tested | Mouse/axes/throttle/three trim/prop/damage, per-axis ownership, lost-focus/pause/reset, CSV/JSON, forces/utilization. Full structural heatmap and native GUI/human handling validation pending |
+| §33–35 projectiles/HE/fire | Not implemented | Follow core damage injection; do not replace it with HP |
+| §38–42 aircraft reuse/fidelity | One data-defined synthetic fixture | Historical data and ≥3 substantially different aircraft remain pending |
+| §45 replay | Tested same binary | No stochastic effects yet; explicit seed required when introduced |
+| §48–49 first playable/full success | Not complete | Engineering viewer is available; finished sky/terrain camera and human flight-feel evaluation remain open |
 
-The implementation must support multiple cells and asymmetric results from the outset; small analytical fixtures may accompany a representative 80–200-cell fixture. A smaller test fixture is a unit test, not grounds to replace the distributed model. Keep clean-flight, direct controls, mouse guidance, mixed ownership, aero damage, structural response, and damaged control chains in the original development order. Record incomplete parts honestly while progressing toward the integrated behavior.
+## Later useful experiments (after milestone review)
 
-Basic projectile penetration and later multiple-aircraft validation remain in the recovered scope. They can follow the core damage-injection scenarios; they should not displace them in the first iteration.
+1. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
+2. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.
+3. Extend material mass bookkeeping and spanwise graph geometry/load mapping, then test large skin loss, critical spar hits and detached-piece aero. Separation momentum is checked, but local material removal does not yet update component mass. Current generalized graph statics are not calibrated local beam stresses.
+4. Extend damaged range/friction/lag/hinge and saturation cases, and speed sweeps. Re-run impossible trim through actual available actuators rather than manufacturing equilibrium.
+5. Run the viewer on a desktop using the documented startup modes and record human observations. Cloud smoke validates transport/rendering only. A future FlightGear adapter still needs explicit aim/ownership and cell/structure telemetry.
 
-## Resolve only meaningful backend uncertainties
+## Blockers
 
-Use the engine-fit research to choose the smallest trial that can settle the backend. JSBSim's existing model or trim capability can be a reference, not proof of the new model's correctness. If using its external-force or mass APIs, test unit conversion, sign conventions, force duplication, and the tick on which updates affect dynamics. If those adapters compromise local cells or structural topology, retain JSBSim as a reference rather than forcing it into production.
-
-Favor one authoritative simulation implementation. Python is useful for experiments, scenario definitions, analysis, and comparison; C++ is a plausible production core. Do not build two complete engines merely to compare them. A choice may be made with clear evidence and remaining uncertainty, rather than waiting for an exhaustive benchmark.
-
-## Evidence to produce
-
-Start with the tests relevant to the implemented stage and expand as it works:
-
-1. Analytic force/moment fixtures: known force at a point, symmetric cells, asymmetric cells, explicit frame and unit conventions.
-2. Headless clean-flight fixture: trim or a documented near-equilibrium condition, finite state, physically interpretable response and energy changes. Synthetic parameter assumptions must accompany plots or telemetry.
-3. Direct-control response: surface limits and actuator response; control damage cannot be bypassed.
-4. Mouse and keyboard behavior: mouse tracking through surfaces; full keyboard roll owns only roll; release is smooth and measurable. No direct attitude writes or hidden corrective torques.
-5. Local damage: remove 25% of the left outer-wing aero cells, compare with clean and symmetric-damage cases, and measure force/moment changes and instructor saturation.
-6. Structural load fixture: stiffness-dependent redistribution, low-load survival after spar weakening, and later high-load progressive failure. Distinguish a structural bench fixture from a full aircraft maneuver until coupled.
-7. Repeatability and timestep convergence: identical scenario replay; compare 120 and 240 Hz with stated tolerances and measured differences. Do not promise cross-platform bitwise determinism without evidence.
-
-Use meaningful physical assertions, not only tests that duplicate the implementation equations or check that the program runs. The original acceptance IDs should remain traceable, with each marked implemented, tested, failed, or pending. First-round progress is not full v0.1 completion.
-
-## Research iteration and reporting
-
-Work in short hypothesis-driven cycles: identify uncertainty, make the smallest model or data change, run a discriminating scenario, inspect measurements, and decide the next step. Report actual measured progress and adverse results. Avoid unrelated SHA/process gates or impressive-looking test counts without behavioral coverage.
-
-Return the draft PR link, how to reproduce the scenarios, the observed outcomes, known failures, uncertainty, and the next experiment most likely to change the model or implementation. Send a concise update if a finding would require weakening a core requirement; do not silently make that tradeoff.
-
-Only after the headless core provides useful evidence, attach a simple existing viewer such as FlightGear. Keep its own FDM disabled when external dynamics are authoritative, preserve the custom mixed-input path, and plan per-cell/structural telemetry rather than treating native pose output as full debug visualization.
+No core build/test blocker. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.

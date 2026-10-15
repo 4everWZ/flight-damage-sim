@@ -1,0 +1,37 @@
+name: Core experiments
+on:
+  pull_request:
+  push:
+    branches: [main, 'feature/**']
+permissions:
+  contents: read
+jobs:
+  physics-and-controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and review mechanics
+        run: make -j2 test
+      - name: Reproduce core and Instructor experiments
+        run: |
+          python3 tools/experiments.py
+          python3 tools/instructor_experiments.py
+          python3 tools/propulsion_experiments.py
+          python3 tools/rotor_experiments.py
+      - name: Exercise live input and render transport
+        run: |
+          python3 -m pip install -r requirements-viewer.txt
+          python3 tests/live_client_tests.py
+          python3 tools/viewer.py --smoke
+          python3 tools/plot_results.py
+      - name: Preserve viewer slice evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-slice-evidence
+          path: |
+            results/viewer-smoke.png
+            results/viewer-input-summary.json
+          if-no-files-found: error

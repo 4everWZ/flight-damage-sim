@@ -1,23 +1,75 @@
 # Flight Damage Sim
 
-A reusable WWII propeller-aircraft simulation core, developed and tested in Codex Cloud.
+A renderer-free C++20 prototype for WWII-style propeller-aircraft flight, mixed mouse/keyboard control and physical aerodynamic/structural damage. Developed and tested in this repository's Codex Cloud environment.
 
-The core combines force-based flight dynamics, War Thunder-style mouse aim with full-authority per-axis keyboard maneuvering, and physical aerodynamic, structural, and control-system damage. Hit points, scripted wing destruction, and direct attitude changes cannot substitute for those systems.
+The first synthetic fixture has 152 aerodynamic cells, 6 structural nodes with front/rear/skin load paths, and independent damaged control chains. Mouse aim and keyboard requests reach actual control surfaces; forces and moments drive 6DoF motion at 120 Hz. Structural section/stiffness and load exposure cause redistribution and delayed failure. Separation follows graph disconnection and updates mass, CG and inertia.
 
-## Design and current direction
+This is a measured first slice, **not completed v0.1 or a historically validated aircraft**. No HP, direct attitude control or scripted wing destruction substitutes for physics. Known limits include reduced structural statics/material law, ballistic detached pieces, uncalibrated blade/engine data and basic Instructor guidance.
 
-- [Current decisions and evidence status](docs/decisions/current-decisions.md)
-- [Recovered original FlightLab v0.1 specification](docs/spec/flight-sim-core-v0.1.original.md)
-- [Relevant original user requirements](docs/sources/user-requirements.md)
-- [Engine fit research and testable uncertainties](docs/research/engine-options-research.md)
-- [First Codex Cloud implementation handoff](docs/plans/codex-cloud-first-iteration.md)
+## Run
 
-The original specification is preserved unchanged. Its Unity 6/C# recommendation is historical; the current request permits C++ and Python according to fit. Language and backend choices should be settled with focused experiments while preserving the required controls, distributed aerodynamics, and structural damage behavior.
+Requires C++20 GCC, GNU make and Python 3:
 
-The simulation core comes first. A simple existing visualization/control tool follows. The first vehicle will be a generic parameterized propeller validation airframe, with historical-aircraft fidelity and multi-aircraft reuse evaluated later.
+```sh
+python3 tools/experiments.py
+python3 tools/instructor_experiments.py
+python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
+python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
+```
 
-## Status
+This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
 
-Repository initialized and prior design recovered. This documentation checkpoint contains no implemented or empirically validated simulation. Implementation and testing await the dedicated Codex Cloud task.
+An optional Matplotlib engineering viewer displays attitude, local cell forces, missing skin, actual controls, axis ownership and structural utilization:
 
-No project distribution license has been selected.
+```sh
+make -j2 build/flight-live
+python3 -m venv .venv-viewer
+.venv-viewer/bin/python -m pip install --no-cache-dir -r requirements-viewer.txt
+mkdir -p results
+.venv-viewer/bin/python tools/viewer.py --smoke       # no display needed
+MPLBACKEND=TkAgg .venv-viewer/bin/python tools/viewer.py  # desktop Python with Tk
+```
+
+[Viewer startup, controls, telemetry and manual checks](docs/viewer-operations.md) cover mouse aim, keyboard axes, throttle, three-axis trim, prop RPM/governor, damage, focus release, pause and reset. All Matplotlib keymaps are disabled. The viewer pauses on lost focus/pointer exit, clears held input and drops wall-time backlog; physics stays at 120 Hz. Automated callbacks and a real Tcl idle queue are tested; native desktop focus/keyboard behavior and human handling remain unverified. The smoke image is marked as an offline test.
+
+On Windows PowerShell, follow the [native startup commands](docs/viewer-operations.md#windows-powershell), which build the viewer with MinGW `g++` and use `.venv-viewer/Scripts/python.exe`. The bash commands above are not PowerShell commands. The same manual includes expected observations for each desktop check and the full automated regression sequence for a bash/GNU make environment.
+
+The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. The current review milestone stops here; the next required check is desktop human operation, not automatic expansion into a full game.
+
+## Minimal integration boundary
+
+`PilotIntent` carries a world aim direction, normalized roll/pitch/yaw requests, one active flag per axis, throttle, available trim and requested prop RPM ratio. `Simulation::step` advances one fixed tick. Per-cell loads remain available before reduction to a `Wrench`; `integrate_body` is the rigid force/moment boundary, and `integrate_rotor_body` jointly integrates the free body and internal spinning shaft. SI units and frame conventions are documented in current decisions and the core header.
+
+`build/flight-live data/validation-bem.airframe` provides a line-oriented local transport. It emits an initial JSON snapshot, then one snapshot per command:
+
+```text
+step ticks aim_x aim_y aim_z mouse roll pitch yaw roll_active pitch_active yaw_active throttle trim_roll trim_pitch trim_yaw [prop_rpm_ratio=1]
+damage cell id area_fraction roughness
+damage spar edge_name remaining_section
+damage link chain_name
+damage engine power_fraction
+damage prop prop_fraction
+damage governor
+governor on|off
+controller flightpath|flightpath-p|legacy|off
+reset
+quit
+```
+
+A batch contains 0–120 fixed ticks. Damage applies at the current tick boundary. Snapshots include body pose/velocity/rates, CG/mass, prop pitch/RPM/target/saturation/tip Mach, actual surfaces, ownership, Instructor target rates, local cell flow/forces/stall/damage and structural section/stiffness/loads/strain/failure. `tools/live_client.py` demonstrates the transport; it never writes attitude or runs flight equations.
+
+The independent mechanics review found and repaired torque-free rotation drift, flexed-wing lift work, initial handoff ownership and damaged trim bypass. New PI guidance reduces this fixture's 90° turn minimum height loss from ~41 m to ~19 m and final loss from ~32 m to ~0.2 m. This is a synthetic case; transient loss and damaged/energy-limited behavior remain. Raw trim residuals, failed hypotheses and comparative trajectories are documented below. The signed prop model produces stopped-blade drag, wind-driven startup and speed-dependent load; a finite pitch governor ends near 1600.36 RPM for a 1600 RPM target, while jam/travel damage retain real overspeed. Six flight cases close the discrete energy/world-torque-impulse ledgers. The old propulsion variant retains its failed stopped-prop/windmilling/load hypotheses. All prop values are synthetic, with no compressibility/tip/swirl correction; overspeed cases do not validate transonic behavior. The CI workflow runs the same reproducible entrypoints.
+
+## Project documents
+
+- [Viewer operations and review milestone](docs/viewer-operations.md)
+- [Current decisions, measured evidence and limitations](docs/decisions/current-decisions.md)
+- [Implementation plan, original acceptance mapping and next experiments](docs/plans/codex-cloud-first-iteration.md)
+- [Unchanged recovered 51-section specification](docs/spec/flight-sim-core-v0.1.original.md)
+- [Original user requirements](docs/sources/user-requirements.md)
+- [Backend/viewer research](docs/research/engine-options-research.md)
+- [Repository-local APEX installation](.agents/skills/README.md)
+
+C++ owns the only simulation. Python drives/analyses that core. JSBSim remains an optional future reference; FlightGear remains an optional future viewer. The current viewer is a debugging tool, not the finished playable prototype.
+
+No project distribution license has been selected. Vendored APEX skills retain their own MIT license.

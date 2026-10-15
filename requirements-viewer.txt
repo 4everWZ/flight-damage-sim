@@ -1,0 +1,3 @@
+# Optional engineering viewer; headless experiments need only g++/make/Python stdlib.
+# 3.11's Agg per-glyph text path is too slow for the live telemetry HUD on Windows.
+matplotlib>=3.6,<3.11
