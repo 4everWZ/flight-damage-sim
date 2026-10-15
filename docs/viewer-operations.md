@@ -148,8 +148,10 @@ python3 tools/rotor_experiments.py
 
 脱离部件现在按自身 cells／CG／速度／角速度计算气动力并积分，控制分支失去驾驶员连接，机械卡死保留或按中立回落；当前 viewer 仍只绘制母体。需要诊断时可读取 live JSON 的新增 `detached` 数组（各部件 pose、气动力／矩、舵面连接、cell 气流与载荷），或运行 `python tools/detachment_experiments.py` 并用 `plot_results.py` 查看 `detached-flight.png`。后者包含同初态弹道对照，属于离线实验，不是人工操控验收。
 
-## 显式材料质量实验（依赖 PR #2）
+## 显式材料质量实验（PR #2/#3 已合并）
 
 `validation-material.airframe` 是同一 BEM 验证体的局部质量离散版本，初始总质量／CG／惯量保持一致。它把左外翼一个质量块拆成保留载体与两个命名材料元，没有新增机型。通过 `build/flight-live data/validation-material.airframe` 进入现有行协议后，可发送 `damage material left_outer_forward .2`：留下该元 20%，去除的 8 kg 按原刚体速度场形成单独碎料刚体；`materials` 返回库存，`detached[].material` 标识碎料来源，空名称表示原结构部件。`debris` 数量包含两者。重复同一剩余值不重复扣账，增大剩余值会被拒绝，R/reset 恢复初始定义。
 
 该事件不自动改气动面积、梁截面或连接，也不施加爆炸冲量。当前没有新增材料 GUI 快捷键，viewer 也不绘制碎料几何。复现核心实验使用 `.venv-viewer/bin/python tools/material_experiments.py`（Windows 对应虚拟环境的 `Scripts/python.exe`），结果为 `results/material-summary.json`。质量／动量／瞬时能量与固定配平响应有通过证据；强滚转闭环的小材料效应在 120/240 Hz 的 10% 一致性假设失败，报告会保留此限制。
+
+核心 rate PI 的积分增量现按归一化输出剩余空间截断，避免跨饱和一步保存不可实现的偏置；键位、aim 语义与实际舵面限制不变。`.venv-viewer/bin/python tools/control_experiments.py` 生成 `control-summary.json` 和 `control-sensitivity.csv`，区分通过的积分边界检查与仍失败的强滚转小材料效应假设。用户已授权无需人工验证的有界核心改动经物理审查和检查后自动合并；这不等同于新增真人手感验收。

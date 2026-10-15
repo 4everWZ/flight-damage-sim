@@ -5,4 +5,4 @@
 - Keep the authoritative simulation renderer-free. All motion is integrated from forces/moments; mouse and keyboard commands share actual damaged control chains. Do not substitute HP, attitude writes, or scripted separation.
 - Keep aerodynamic cells, structural connections, and control systems independently represented. Synthetic fixture values are not historical aircraft measurements.
 - Run `python3 tools/experiments.py` for the first headless slice. Build and generated telemetry live in ignored `build/` and `results/`.
-- Work on a feature branch; PRs must be draft. Honor any session-specific pause on remote writes. Never merge automatically.
+- Work on a feature branch and open PRs as drafts while review/checks run. Follow the user's latest merge authorization: bounded core changes that need no human testing may be marked ready and merged after reviewing physical claims and passing relevant checks/CI; verify main and post-merge CI. Leave changes requiring human handling/GUI validation or a material scope decision for a user report. Honor any session-specific pause on remote writes and preserve user changes.

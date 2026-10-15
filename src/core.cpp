@@ -406,10 +406,18 @@ void Simulation::update_controls(const PilotIntent &p) {
     if (instructor_mode == InstructorMode::FlightPath &&
         guidance.rate_integral) {
       constexpr std::array<double, 3> integral_gain{.8, 1.2, .5};
-      if (!pause)
+      if (!pause) {
+        double increment = integral_gain[axis] * error * dt;
+        // Limit integration to the remaining command headroom within this tick.
+        // A whole-step gate alone stores an unreachable, dt-dependent bias when
+        // the command crosses saturation between two controller samples.
+        if (increment > 0)
+          increment = std::min(increment, std::max(1 - raw, 0.));
+        else
+          increment = std::max(increment, std::min(-1 - raw, 0.));
         instructor.rate_bias[axis] =
-            clamp(instructor.rate_bias[axis] + integral_gain[axis] * error * dt,
-                  -.9, .9);
+            clamp(instructor.rate_bias[axis] + increment, -.9, .9);
+      }
     } else
       instructor.rate_bias[axis] = 0;
     raw = p.mouse && instructor_mode != InstructorMode::Off

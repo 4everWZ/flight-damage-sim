@@ -4,7 +4,7 @@ CPPFLAGS += -Iinclude
 CORE = src/core.cpp src/propeller.cpp
 
 .PHONY: all test clean
-all: build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests
+all: build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe
 
 build:
 	mkdir -p build
@@ -36,12 +36,19 @@ build/detachment-tests: $(CORE) tests/detachment_tests.cpp include/flight/core.h
 build/material-tests: $(CORE) tests/material_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/material_tests.cpp -o $@
 
+build/control-tests: $(CORE) tests/control_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/control_tests.cpp -o $@
+
+build/control-probe: $(CORE) tests/control_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/control_probe.cpp -o $@
+
 test: all
 	./build/core-tests data/validation.airframe
 	./build/mechanics-review data/validation.airframe
 	./build/propeller-tests data/validation-bem.airframe
 	./build/detachment-tests data/validation-bem.airframe
 	./build/material-tests data/validation-material.airframe data/validation-bem.airframe
+	./build/control-tests data/validation-material.airframe
 
 clean:
 	rm -rf build

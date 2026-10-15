@@ -6,15 +6,15 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-PR #1 was merged by the user after desktop fixes and passing CI. Main is `9f0bd7c` and includes user commit `1d6d837` (viewer performance, cleanup and corrected display). The user explicitly resumed automatic bounded core iterations on 2026-10-15. PR #2 (`feature/detached-aero-systems`, head `3799d4b`) remains an unmerged draft. The material follow-up is stacked on that exact head on `feature/local-material-mass`, with its PR based on the PR #2 branch; preserve all user work, use draft PRs, and never merge automatically. Cloud agent configuration is not added to Git.
+The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15. PR #2 merged as `decb406` and PR #3 as `f07d235`; both post-merge main push workflows passed. Their force/moment ownership and mass/P/H/energy claims were reviewed separately from CI. The unresolved full-roll material sensitivity limits fidelity claims but does not invalidate those bounded mechanisms. Current development is `feature/control-sensitivity` from merged main `f07d235`. Preserve user viewer changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Open drafts for review/checks, then merge eligible core work under the standing authorization and verify the resulting main CI.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
 ## Current bounded iteration
 
-Add explicit local material inventory and a conservative removal event. Recompute the current owner mass/CG/full inertia, recenter its state without moving the surviving geometry, and transfer removed mass/intrinsic inertia with the existing rigid velocity field into a separate passive body. Test attached and detached ownership, repeated events, total mass/P/H/instant energy, free flight, actual fixed-trim response and small positive parcels. No automatic area-to-mass or section-to-mass conversion is introduced; topology/damage state stays independent.
+Prevent rate-PI integration from storing unreachable bias when it crosses normalized command saturation within one tick. Clip only the integral increment to current command headroom; keep controller gains, input semantics, physical control chains and force/moment dynamics unchanged. Verify positive/negative crossings on all axes, fixed-error 60–480 Hz agreement, unchanged unsaturated increments and real keyboard/handoff/disconnect freezes.
 
-The material definition scales a declared element uniformly at a fixed centroid. Non-removable node carriers, no ejection impulse and no parcel aero geometry are explicit scope limits. The full-roll closed-loop small-effect 10% refinement hypothesis failed and remains in the report; fixed-trim response and instantaneous conservation have separate passing evidence. Cross-span structural mapping, physically shaped fragmentation and automatic material/aero/structure intersection remain future work. Preserve user viewer changes and the original spec; do not merge either draft PR automatically.
+Retain matched material perturbation experiments through 960 Hz. Refreshing the previous-tick load estimate was tested as an ablation and did not resolve the sensitivity; production sensor timing is unchanged. The new headroom invariant passes, but the 120/240 Hz full-roll material-effect 10% hypothesis remains false. Further convergence/actuator/structural studies remain core work; this change does not claim that small-damage flight fidelity is finished.
 
 ## Reproduce
 
@@ -26,6 +26,7 @@ python3 tools/propulsion_experiments.py
 python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py
 python3 tools/material_experiments.py
+python3 tools/control_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
@@ -69,4 +70,4 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Blockers
 
-No known core build/test blocker. This iteration must observe CI for its own pushed head. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.
+No known build/test blocker. Both PR #2/#3 post-merge main workflows passed; this iteration must observe its own PR and post-merge workflows. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.
