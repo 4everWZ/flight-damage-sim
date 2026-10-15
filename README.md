@@ -16,6 +16,7 @@ python3 tools/instructor_experiments.py
 python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
 python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
 python3 tools/detachment_experiments.py  # owned-cell piece flight and control partition
+python3 tools/material_experiments.py    # explicit local inventory and conservative mass transfer
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
@@ -50,6 +51,7 @@ damage spar edge_name remaining_section
 damage link chain_name
 damage engine power_fraction
 damage prop prop_fraction
+damage material material_name remaining_fraction
 damage governor
 governor on|off
 controller flightpath|flightpath-p|legacy|off
@@ -60,6 +62,8 @@ quit
 A batch contains 0–120 fixed ticks. Damage applies at the current tick boundary. Snapshots include body pose/velocity/rates, CG/mass, prop pitch/RPM/target/saturation/tip Mach, actual surfaces, ownership, Instructor target rates, local cell flow/forces/stall/damage and structural section/stiffness/loads/strain/failure. `tools/live_client.py` demonstrates the transport; it never writes attitude or runs flight equations.
 
 The independent mechanics review found and repaired torque-free rotation drift, flexed-wing lift work, initial handoff ownership and damaged trim bypass. New PI guidance reduces this fixture's 90° turn minimum height loss from ~41 m to ~19 m and final loss from ~32 m to ~0.2 m. This is a synthetic case; transient loss and damaged/energy-limited behavior remain. Raw trim residuals, failed hypotheses and comparative trajectories are documented below. The signed prop model produces stopped-blade drag, wind-driven startup and speed-dependent load; a finite pitch governor ends near 1600.36 RPM for a 1600 RPM target, while jam/travel damage retain real overspeed. Six flight cases close the discrete energy/world-torque-impulse ledgers. The old propulsion variant retains its failed stopped-prop/windmilling/load hypotheses. All prop values are synthetic, with no compressibility/tip/swirl correction; overspeed cases do not validate transonic behavior. The CI workflow runs the same reproducible entrypoints.
+
+The optional `data/validation-material.airframe` discretizes the same body's outer-wing mass into named material elements, preserving initial mass/CG/inertia. `damage material left_outer_forward .2` leaves 20% of that element and transfers the removed 8 kg into a separately integrated passive body. Owner mass/CG/full inertia and inertial loads update, with total mass/P/H/instant energy checks. This does not implicitly change aero area or spar section. Material particles have no aero geometry; carriers remain non-removable. The current full-roll small-effect timestep hypothesis failed and is reported separately from passing fixed-trim and conservation checks. This follow-up depends on unmerged Draft PR #2; no PR is automatically merged.
 
 ## Project documents
 

@@ -22,11 +22,13 @@ jobs:
           python3 tools/propulsion_experiments.py
           python3 tools/rotor_experiments.py
           python3 tools/detachment_experiments.py
+          python3 tools/material_experiments.py
       - name: Exercise live input and render transport
         run: |
           python3 -m pip install -r requirements-viewer.txt
           python3 tests/live_client_tests.py
           python3 tests/detached_live_tests.py
+          python3 tests/material_live_tests.py
           python3 tools/viewer.py --smoke
           python3 tools/plot_results.py
       - name: Preserve viewer slice evidence
@@ -45,4 +47,10 @@ jobs:
             results/detachment-summary.json
             results/detached-flight.csv
             results/detached-flight.png
+          if-no-files-found: error
+      - name: Preserve material mass experiment
+        uses: actions/upload-artifact@v4
+        with:
+          name: material-evidence
+          path: results/material-summary.json
           if-no-files-found: error

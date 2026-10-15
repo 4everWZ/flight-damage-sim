@@ -52,6 +52,19 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
             << (s.def.engine.pitch_jammed ? "true" : "false")
             << ",\"shaft_power\":" << s.def.engine.shaft_power
             << ",\"tip_mach\":" << s.def.engine.tip_mach;
+  std::cout << ",\"materials\":[";
+  bool first_material = true;
+  for (const auto &m : s.def.masses)
+    if (!m.material_name.empty()) {
+      if (!first_material)
+        std::cout << ',';
+      first_material = false;
+      std::cout << "{\"name\":" << std::quoted(m.material_name)
+                << ",\"node\":" << m.node << ",\"initial_mass\":" << m.mass
+                << ",\"remaining_fraction\":" << m.remaining
+                << ",\"remaining_mass\":" << m.mass * m.remaining << '}';
+    }
+  std::cout << ']';
   std::cout << ",\"ownership\":[";
   for (int i = 0; i < 3; ++i) {
     if (i)
@@ -108,7 +121,8 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
     if (i)
       std::cout << ',';
     const auto &piece = s.debris[i];
-    std::cout << "{\"mass\":" << piece.mass.mass << ",\"cg\":";
+    std::cout << "{\"material\":" << std::quoted(piece.material_name)
+              << ",\"mass\":" << piece.mass.mass << ",\"cg\":";
     vec(piece.mass.cg);
     std::cout << ",\"position\":";
     vec(piece.state.position);
@@ -246,6 +260,12 @@ int main(int argc, char **argv) {
             if (!input || !std::isfinite(area) || !std::isfinite(roughness))
               throw std::runtime_error("invalid cell damage");
             s.damage_cell(id, area, roughness);
+          } else if (target == "material") {
+            double remaining;
+            input >> name >> remaining;
+            if (!input)
+              throw std::runtime_error("invalid material event");
+            s.remove_material(name, remaining);
           } else if (target == "spar") {
             double section;
             input >> name >> section;

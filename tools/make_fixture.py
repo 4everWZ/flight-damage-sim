@@ -72,3 +72,15 @@ for deg in range(-180,181,5):
 bem_rows=[row.replace('engine 850000 2600','engine 500000 1600') for row in rows]
 (root/'data'/'validation-bem.airframe').write_text('\n'.join(bem_rows+prop)+'\n')
 print(f'wrote {id_} cells')
+
+# Same BEM body with an explicit local material discretization. Initial mass,
+# CG and full inertia match the unsplit 130 kg left outer-wing mass exactly.
+material_rows=['# Same BEM body; explicit material inventory, not historical material data.',
+               '# material node name kg datum_x datum_y datum_z Ixx Iyy Izz']
+for row in bem_rows+prop:
+    if row=='mass 2 130 0.15 -4 0 60 25 65':
+        material_rows += ['mass 2 110 0.15 -4 0 58 23 61.2',
+                          'material 2 left_outer_forward 10 .45 -4 0 1 .1 1',
+                          'material 2 left_outer_aft 10 -.15 -4 0 1 .1 1']
+    else:material_rows.append(row)
+(root/'data'/'validation-material.airframe').write_text('\n'.join(material_rows)+'\n')

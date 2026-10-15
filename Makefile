@@ -4,7 +4,7 @@ CPPFLAGS += -Iinclude
 CORE = src/core.cpp src/propeller.cpp
 
 .PHONY: all test clean
-all: build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests
+all: build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests
 
 build:
 	mkdir -p build
@@ -33,11 +33,15 @@ build/governor-probe: $(CORE) tests/governor_probe.cpp include/flight/core.hpp i
 build/detachment-tests: $(CORE) tests/detachment_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/detachment_tests.cpp -o $@
 
+build/material-tests: $(CORE) tests/material_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/material_tests.cpp -o $@
+
 test: all
 	./build/core-tests data/validation.airframe
 	./build/mechanics-review data/validation.airframe
 	./build/propeller-tests data/validation-bem.airframe
 	./build/detachment-tests data/validation-bem.airframe
+	./build/material-tests data/validation-material.airframe data/validation-bem.airframe
 
 clean:
 	rm -rf build
