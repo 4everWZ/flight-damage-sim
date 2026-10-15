@@ -25,6 +25,7 @@ jobs:
           python3 tools/material_experiments.py
           python3 tools/control_experiments.py
           python3 tools/sensor_history_experiments.py
+          python3 tools/load_sample_experiments.py
       - name: Exercise live input and render transport
         run: |
           python3 -m pip install -r requirements-viewer.txt
@@ -69,4 +70,7 @@ jobs:
             results/sensor-history-release.csv
             results/sensor-history-120-*.txt
             results/sensor-history-960-*.txt
+            results/load-sample-summary.json
+            results/load-sample-cases.txt
+            results/load-sample-trace.csv
           if-no-files-found: error

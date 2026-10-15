@@ -288,6 +288,31 @@ python3 tools/sensor_history_experiments.py --history-prefix results/sensor-base
 
 The probe can compile against either core; it observes the force sample actually supplied by that version. The synthetic fixture is unchanged between these versions. Neither the mechanical-jam stage boundary nor sensor assignment to an isolated controller instance is a production flight or damaged-control substitute. Original spec, user viewer code, local skills and fixed 120 Hz live integration remain intact. Native GUI/human handling was not validated.
 
+## Original load-sample age under physical refinement
+
+The next diagnostic holds the original 120 Hz control/request clock and the original raw aerodynamic-force age: at control time `t`, use body-normal `F_aero,z(t−1/240 s)` and compute `G=−F_sample/(M_current g)`. It deliberately preserves the material-event behavior: `remove_material` re-expresses cached moments about the new CG, leaves the cached force unchanged, and recomputes G using the new current mass. Holding an old normalized G would change this system. No production force, control, sensor, damage, gain or acceptance code changed in this iteration.
+
+The offline observer uses integer ticks of `1/(2*plant_hz)`. Applied physical midpoint forces have odd timestamps; fixed sample age is exactly `plant_hz/120` ticks for 120/240/480/960 Hz plants. At 120 Hz the requested force is an exact stored sample. Finer plants linearly reconstruct the value from already available bracketing midpoint samples; no off-tick force evaluation, future control-time sample or physical pose assignment is used. Startup extends the existing trim cache as a constant prehistory. This reconstructs the reduced applied-force signal, not a newly calibrated accelerometer model.
+
+An independently generated default native 120 Hz history is the positive control. Both clean and material cases reproduce **every** control-step body position/velocity/rates/quaternion, G, emitted requests, PI bias, ownership, pause flags, actuator endpoints and force-position samples with zero reported error, including the mass event and final body state. Exact/ramp interpolation and missing-bracket checks run before the flights; timestamp traces show all reads are causal, with displayed age error ≤6.6e−16 s from floating-point output.
+
+At 1 s the material event changes mass from 2800 to 2792 kg. The cached force change and cached-G recomputation error report zero at every plant rate. In the default 120 Hz case the force time is 0.9958333 s, `Fz≈−27332.1509 N`, and the observed G is ≈0.9982463 using **2792 kg**. The fixed-age observer and default cache agree exactly. This verifies the event normalization rather than refreshing a more recent force to obtain agreement.
+
+| Physical Hz; controller fixed at 120 Hz | Material-effect norm at 5 s | Adjacent effect-vector difference |
+|---|---:|---:|
+| 120 | 0.243725671 m | — |
+| 240 | 0.243001390 m | 0.005601593 m |
+| 480 | 0.244036585 m | 0.003883536 m |
+| 960 | 0.243044008 m | 0.001885530 m |
+
+The 120/240 controlled difference is ~2.30% of the 120 Hz effect; 120/960 differs by ~0.008907 m. These are **diagnostic measurements**, not a replacement acceptance test or a universal convergence-order claim. The original native all-rates grid still changes controller update/read/output periods and cached-force age together. Its 120/240 disagreement remains ~0.124183 m and the original 10% hypothesis remains **false**. That code and threshold are untouched.
+
+No new production implementation defect is demonstrated. The same physical integration/actuation kernel, with the default 120 Hz chain preserved, refines much more closely when its sampled feedback contract is held fixed. This is evidence that the original discrepancy includes changing the sampled control system, not evidence to keep patching physics or retuning gains. If the intended target is the continuous-controller limit of the entire all-rates system, that original failure still matters; accepting a fixed digital 120 Hz controller instead would require a separately reviewed interpretation. This experiment does not choose between those targets.
+
+The next bounded mechanism test can fix the physical plant at 960 Hz and the force age at 1/240 s, then compare: (1) internal controller/sensor/output all 120 Hz; (2) internal updates 960 Hz with sensor/output still 120 Hz; (3) sensor reads also 960 Hz with output still 120 Hz; (4) output also 960 Hz. Use live physical feedback and the same mass event to distinguish internal update/emission phase, observation cadence and output hold before any controller change. Treat the interventions as conditional comparisons, not additive error percentages.
+
+`python3 tools/load_sample_experiments.py` builds the existing probe and runs its independent `age` mode. It writes `load-sample-summary.json`, case data and a control-time/force-time/bracket/mass/G trace under ignored `results/`; CI retains them in `control-evidence`. `python3 tools/control_experiments.py` continues to reproduce the separate original grid. No GUI or historical-aircraft fidelity claim follows from this one synthetic 5 s maneuver.
+
 ## How decisions change
 
 Record a testable hypothesis, actual result, uncertainty and useful next experiment. Routine reversible implementation choices can proceed; any choice removing or weakening a core requirement must be reported first. Preserve failed evidence when it changes interpretation. Do not turn partial mechanisms, stubs or a rendered aircraft into a claim of full v0.1 completion.
