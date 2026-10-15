@@ -1,5 +1,6 @@
 """Tick-stamped transport to C++; no flight physics or device keycodes in the core."""
 import json
+import os
 import subprocess
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,8 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 class CoreClient:
     def __init__(self,airframe='validation-bem.airframe'):
         self.process = subprocess.Popen([str(ROOT/'build'/'flight-live'), str(ROOT/'data'/airframe)],
-                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
-        self.state = self._read()
+                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
+                                        creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+        try:
+            self.state = self._read()
+        except BaseException:
+            self.close()
+            raise
 
     def _read(self):
         line = self.process.stdout.readline()
@@ -34,12 +40,28 @@ class CoreClient:
         return self.command('step '+' '.join(str(v) for v in values))
 
     def close(self):
-        if self.process.poll() is None:
-            self.process.stdin.write('quit\n')
-            self.process.stdin.flush()
-            self.process.wait(timeout=5)
-        self.process.stdin.close()
-        self.process.stdout.close()
+        try:
+            if self.process.poll() is None:
+                try:
+                    self.process.stdin.write('quit\n')
+                    self.process.stdin.flush()
+                except (OSError,ValueError):
+                    pass
+                try:
+                    self.process.wait(timeout=.5)
+                except subprocess.TimeoutExpired:
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=.5)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                        self.process.wait()
+        finally:
+            for stream in (self.process.stdin,self.process.stdout):
+                try:
+                    stream.close()
+                except OSError:
+                    pass
 
     def __enter__(self):
         return self

@@ -25,11 +25,14 @@ An optional Matplotlib engineering viewer displays attitude, local cell forces, 
 make -j2 build/flight-live
 python3 -m venv .venv-viewer
 .venv-viewer/bin/python -m pip install --no-cache-dir -r requirements-viewer.txt
+mkdir -p results
 .venv-viewer/bin/python tools/viewer.py --smoke       # no display needed
 MPLBACKEND=TkAgg .venv-viewer/bin/python tools/viewer.py  # desktop Python with Tk
 ```
 
 [Viewer startup, controls, telemetry and manual checks](docs/viewer-operations.md) cover mouse aim, keyboard axes, throttle, three-axis trim, prop RPM/governor, damage, focus release, pause and reset. All Matplotlib keymaps are disabled. The viewer pauses on lost focus/pointer exit, clears held input and drops wall-time backlog; physics stays at 120 Hz. Automated callbacks and a real Tcl idle queue are tested; native desktop focus/keyboard behavior and human handling remain unverified. The smoke image is marked as an offline test.
+
+On Windows PowerShell, follow the [native startup commands](docs/viewer-operations.md#windows-powershell), which build the viewer with MinGW `g++` and use `.venv-viewer/Scripts/python.exe`. The bash commands above are not PowerShell commands. The same manual includes expected observations for each desktop check and the full automated regression sequence for a bash/GNU make environment.
 
 The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. The current review milestone stops here; the next required check is desktop human operation, not automatic expansion into a full game.
 

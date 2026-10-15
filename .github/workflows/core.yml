@@ -24,6 +24,7 @@ jobs:
       - name: Exercise live input and render transport
         run: |
           python3 -m pip install -r requirements-viewer.txt
+          python3 tests/live_client_tests.py
           python3 tools/viewer.py --smoke
           python3 tools/plot_results.py
       - name: Preserve viewer slice evidence

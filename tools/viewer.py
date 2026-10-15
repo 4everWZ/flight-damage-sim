@@ -8,6 +8,7 @@ import argparse
 import os
 import math
 import time
+import numpy as np
 from pathlib import Path
 from live_client import CoreClient, ROOT
 
@@ -17,6 +18,11 @@ def rotate(v, q):
     w,x,y,z=q
     tx,ty,tz=2*(y*v[2]-z*v[1]),2*(z*v[0]-x*v[2]),2*(x*v[1]-y*v[0])
     return (v[0]+w*tx+y*tz-z*ty,v[1]+w*ty+z*tx-x*tz,v[2]+w*tz+x*ty-y*tx)
+
+
+def display_vector(ned):
+    # ENU is right-handed. Plotting North/East/Up would mirror the aircraft.
+    return (ned[1],ned[0],-ned[2])
 
 
 # Disable every built-in Matplotlib shortcut: q/s/g/arrows/trim keys belong to flight.
@@ -43,6 +49,10 @@ class Viewer:
         self.paused=False
         self.previous=time.monotonic()
         self.accumulator=0
+        self.timer=None
+        self.closed=False
+        self.display_fps=0
+        self.last_display=None
         self.fig=plt.figure(figsize=(14,8), facecolor='#101a29')
         self.flight=self.fig.add_axes([.02,.23,.48,.70],projection='3d',facecolor='#c2deed')
         self.aim_axis=self.fig.add_axes([.57,.68,.38,.24],facecolor='#e5f0f4')
@@ -57,8 +67,98 @@ class Viewer:
             self.tk_widget=self.fig.canvas.get_tk_widget()
             self.tk_widget.bind('<FocusOut>',self.focus_lost,add='+')
         self.fig.canvas.mpl_connect('button_press_event',self.set_aim)
-        self.fig.canvas.mpl_connect('close_event',lambda _:core.close())
+        self.fig.canvas.mpl_connect('close_event',self.close)
+        self.background=None
+        self.blit_enabled=False
+        self.setup_artists()
         self.draw()
+
+    def setup_artists(self):
+        # Static axes and persistent artists: rebuilding axes dominates frame time.
+        self.cells_artist=self.flight.scatter([],[],[],s=14,depthshade=False)
+        self.force_artist=self.flight.quiver([],[],[],[],[],[],color='#925571',linewidth=.7)
+        self.body_artist,=self.flight.plot([],[],[],color='#15283e',lw=3)
+        self.flight.set(xlim=(-6,6),ylim=(-6,6),zlim=(-6,6),xlabel='East relative (m)',ylabel='North relative (m)',zlabel='Up relative (m)')
+        self.flight.view_init(elev=22,azim=155)
+        self.flight.set_title('Attitude + cell forces · red = missing skin · amber = local stall',fontsize=9,color='white')
+        self.aim_axis.set(xlim=(-180,180),ylim=(-30,45),xlabel='Aim heading (deg)',ylabel='Elevation (deg)')
+        self.aim_axis.grid(alpha=.3)
+        self.aim_artist=self.aim_axis.scatter([],[],s=70,marker='+',color='#b64335',label='aim')
+        self.actual_path=self.aim_axis.scatter([],[],s=32,color='#276788',label='actual')
+        self.path_legend=self.aim_axis.legend(loc='upper left',fontsize=8)
+        self.aim_axis.set_title('Aim (+) and actual air path (o) · heading / elevation',fontsize=10,color='white')
+        edges=self.core.state['edges']
+        self.edge_bars=self.structure.barh(range(len(edges)),[0]*len(edges))
+        self.structure.set_yticks(range(len(edges)),[e['name'] for e in edges],fontsize=7)
+        self.structure.set_ylim(-.5,len(edges)-.5)
+        self.structure.axvline(1,color='#b64335',ls='--',lw=1)
+        self.structure.set(xlim=(0,3),xlabel='Applied equivalent stress / ultimate stress')
+        self.structure.set_title('Independent structural graph · strain drives failure',fontsize=10,color='white')
+        for axis in [self.flight,self.aim_axis,self.structure]:
+            color='#20354a' if axis is self.flight else 'white'
+            axis.tick_params(colors=color)
+            axis.xaxis.label.set_color(color)
+            axis.yaxis.label.set_color(color)
+        self.flight.zaxis.label.set_color('#20354a')
+        self.hud.set_position((.035,.11))
+        self.fig.text(.035,.03,
+                      'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   I/K: pitch trim   J/L: roll trim   U/O: yaw trim\n'
+                      'Space: pause/resume   R: reset   M: controller   Loss of canvas focus/pointer pauses and releases input\n'
+                      'F2: left skin loss   F3: left aileron cable   F4: spar section 30%   F5: elevator cable   F6: half power   G: governor   F7: pitch jam   PgUp/Dn: RPM request',
+                      color='white',fontsize=10,family='monospace')
+        self.dynamic_artists=[self.cells_artist,self.force_artist,self.body_artist,
+                              self.aim_artist,self.actual_path,self.path_legend,*self.edge_bars,self.hud]
+
+    def enable_blit(self):
+        self.blit_enabled=self.fig.canvas.supports_blit
+        if self.blit_enabled:
+            for artist in self.dynamic_artists:artist.set_animated(True)
+            self.fig.canvas.mpl_connect('draw_event',self.cache_background)
+            self.fig.canvas.mpl_connect('resize_event',self.invalidate_background)
+        self.fig.canvas.draw()
+
+    def invalidate_background(self,_):
+        self.background=None
+
+    def cache_background(self,_):
+        self.background=self.fig.canvas.copy_from_bbox(self.fig.bbox)
+        self.present()
+
+    def present(self):
+        if not self.blit_enabled:
+            self.fig.canvas.draw_idle()
+        elif self.background is None:
+            self.fig.canvas.draw_idle()
+        else:
+            self.fig.canvas.restore_region(self.background)
+            # 3D collections normally project during a full axes draw.
+            self.cells_artist.do_3d_projection()
+            self.force_artist.do_3d_projection()
+            for artist in self.dynamic_artists:self.fig.draw_artist(artist)
+            self.fig.canvas.blit(self.fig.bbox)
+
+    def display_frame(self):
+        if self.closed:return False
+        started=time.monotonic()
+        if self.last_display is not None:
+            self.display_fps=1/max(1e-9,started-self.last_display)
+        self.last_display=started
+        self.frame(None)
+        self.present()
+        if self.timer is not None:
+            # Tk schedules the next callback after this one finishes.
+            self.timer.interval=max(1,round(1000/30-(time.monotonic()-started)*1000))
+
+    def close(self,_=None):
+        if self.closed:return
+        self.closed=True
+        if self.timer is not None:self.timer.stop()
+        if self.tk_widget is not None:
+            for callback,_ in self.pending_releases.values():
+                self.tk_widget.after_cancel(callback)
+        self.pending_releases.clear()
+        self.background=None
+        self.core.close()
 
     def set_aim(self,event):
         if event.inaxes!=self.aim_axis or event.xdata is None or event.ydata is None or getattr(event,'button',1)!=1:
@@ -163,62 +263,52 @@ class Viewer:
 
     def draw(self):
         s=self.core.state
-        self.flight.clear()
-        self.flight.set_facecolor('#c2deed')
         cg=s['cg']
         visible=[c for c in s['cells'] if c['attached']]
         positions=[rotate([c['position'][i]-cg[i] for i in range(3)],s['quaternion']) for c in visible]
         colors=['#ed6e5d' if c['area_fraction']<1 else '#d79b36' if c['stall'] else '#276788' for c in visible]
-        if positions:
-            self.flight.scatter([p[0] for p in positions],[p[1] for p in positions],[-p[2] for p in positions],s=14,c=colors,depthshade=False)
+        xyz=np.asarray([display_vector(p) for p in positions],dtype=float).reshape(-1,3)
+        self.cells_artist.set_offsets(xyz[:,:2])
+        self.cells_artist.set_3d_properties(xyz[:,2],'z')
+        self.cells_artist.set_color(colors)
         sample=list(zip(visible,positions))[::8]
+        segments=[]
         if sample:
             forces=[rotate(c['force'],s['quaternion']) for c,_ in sample]
             scale=1.5/max(1,max(math.sqrt(sum(v*v for v in f)) for f in forces))
-            self.flight.quiver([p[0] for _,p in sample],[p[1] for _,p in sample],[-p[2] for _,p in sample],
-                               [f[0]*scale for f in forces],[f[1]*scale for f in forces],[-f[2]*scale for f in forces],color='#925571',linewidth=.7)
-        nose=rotate([2-cg[0],-cg[1],-cg[2]],s['quaternion'])
-        tail=rotate([-4.8-cg[0],-cg[1],-cg[2]],s['quaternion'])
-        self.flight.plot([nose[0],tail[0]],[nose[1],tail[1]],[-nose[2],-tail[2]],color='#15283e',lw=3)
-        self.flight.set(xlim=(-6,6),ylim=(-6,6),zlim=(-6,6),xlabel='North relative (m)',ylabel='East relative (m)',zlabel='Up relative (m)')
-        self.flight.view_init(elev=22,azim=155)
-        self.flight.set_title('Attitude + cell forces · red = missing skin · amber = local stall',fontsize=9,color='white')
-        self.aim_axis.clear()
+            for (_,p),f in zip(sample,forces):
+                start=np.asarray(display_vector(p))
+                vector=np.asarray(display_vector(f))*scale
+                tip=start+vector
+                side=np.cross(vector,[0,0,1])
+                if np.linalg.norm(side)<1e-12:side=np.cross(vector,[0,1,0])
+                side=side/max(np.linalg.norm(side),1e-12)*np.linalg.norm(vector)*.08
+                segments.extend(([start,tip],[tip,tip-.25*vector+side],[tip,tip-.25*vector-side]))
+        self.force_artist.set_segments(segments)
+        nose=display_vector(rotate([2-cg[0],-cg[1],-cg[2]],s['quaternion']))
+        tail=display_vector(rotate([-4.8-cg[0],-cg[1],-cg[2]],s['quaternion']))
+        self.body_artist.set_data_3d([nose[0],tail[0]],[nose[1],tail[1]],[nose[2],tail[2]])
         heading=math.degrees(math.atan2(self.aim[1],self.aim[0]))
         elevation=math.degrees(math.atan2(-self.aim[2],math.hypot(*self.aim[:2])))
-        self.aim_axis.set(xlim=(-180,180),ylim=(-30,45),xlabel='Aim heading (deg)',ylabel='Elevation (deg)')
-        self.aim_axis.grid(alpha=.3)
-        self.aim_axis.scatter([heading],[elevation],s=70,marker='+',color='#b64335',label='aim')
+        self.aim_artist.set_offsets([[heading,elevation]])
         velocity=[v-w for v,w in zip(s['velocity'],s['wind'])]
-        self.actual_path=None
+        self.actual_path.set_offsets(np.empty((0,2)))
+        label='actual (no airspeed)'
         if sum(v*v for v in velocity)>1e-12:
             actual_heading=math.degrees(math.atan2(velocity[1],velocity[0]))
             actual_elevation=math.degrees(math.atan2(-velocity[2],math.hypot(*velocity[:2])))
-            self.actual_path=self.aim_axis.scatter([actual_heading],[actual_elevation],s=32,color='#276788',
-                                                 label=f'actual {actual_heading:+.1f}° / {actual_elevation:+.1f}°')
-        self.aim_axis.legend(loc='upper left',fontsize=8)
-        self.aim_axis.set_title('Aim (+) and actual air path (o) · heading / elevation',fontsize=10,color='white')
-        self.structure.clear()
+            self.actual_path.set_offsets([[actual_heading,actual_elevation]])
+            label=f'actual {actual_heading:+.1f}° / {actual_elevation:+.1f}°'
+        self.path_legend.get_texts()[1].set_text(label)
         edges=s['edges']
-        self.structure.barh(range(len(edges)),[min(e['ultimate_utilization'],3) for e in edges],color=['#b64335' if e['failed'] else '#426e79' for e in edges])
-        self.structure.set_yticks(range(len(edges)),[e['name'] for e in edges],fontsize=7)
-        self.structure.axvline(1,color='#b64335',ls='--',lw=1)
-        self.structure.set(xlim=(0,3),xlabel='Applied equivalent stress / ultimate stress')
-        self.structure.set_title('Independent structural graph · strain drives failure',fontsize=10,color='white')
-        for axis in [self.flight,self.aim_axis,self.structure]:
-            color='#20354a' if axis is self.flight else 'white'
-            axis.tick_params(colors=color)
-            axis.xaxis.label.set_color(color)
-            axis.yaxis.label.set_color(color)
-        self.flight.zaxis.label.set_color('#20354a')
+        for bar,edge in zip(self.edge_bars,edges):
+            bar.set_width(min(edge['ultimate_utilization'],3))
+            bar.set_facecolor('#b64335' if edge['failed'] else '#426e79')
         owners=' / '.join(f'{a}: {o["direct_weight"]:.2f}' for a,o in zip(('roll','pitch','yaw'),s['ownership']))
         surfaces=' '.join(f'{c["name"]}={math.degrees(c["deflection"]):+.1f}°' for c in s['chains'])
         speed=math.sqrt(sum((v-w)**2 for v,w in zip(s['velocity'],s['wind'])))
-        self.hud.set_text(f'{"PAUSED · Space resumes" if self.paused else "RUNNING"}  {s["propeller_model"]}/{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}\n'
-                          f'Trim (roll/pitch/yaw)={s["trim"][0]:+.3f}/{s["trim"][1]:+.3f}/{s["trim"][2]:+.3f}  Prop pitch={math.degrees(s["prop_pitch"]):.1f}° target={s["target_rpm"]:.0f}rpm limited={s["governor_saturated"]} tipMach={s["tip_mach"]:.2f}   Direct: {owners}\nSurfaces: {surfaces}\n'
-                          'Arrows: pitch/roll   Q/E: yaw   W/S: throttle   I/K: pitch trim   J/L: roll trim   U/O: yaw trim\n'
-                          'Space: pause/resume   R: reset   M: controller   Loss of canvas focus/pointer pauses and releases input\n'
-                          'F2: left skin loss   F3: left aileron cable   F4: spar section 30%   F5: elevator cable   F6: half power   G: governor   F7: pitch jam   PgUp/Dn: RPM request')
+        self.hud.set_text(f'{"PAUSED · Space resumes" if self.paused else "RUNNING"}  {s["propeller_model"]}/{s["controller"]}  t={s["tick"]/120:6.2f}s  TAS={speed:6.1f}m/s  ALT={-s["position"][2]:7.1f}m  G={s["g"]:5.2f}  RPM={s["rpm"]:5.0f}  throttle={s["throttle"]:.2f}  pieces={s["debris"]}  FPS={self.display_fps:4.1f}\n'
+                          f'Trim (roll/pitch/yaw)={s["trim"][0]:+.3f}/{s["trim"][1]:+.3f}/{s["trim"][2]:+.3f}  Prop pitch={math.degrees(s["prop_pitch"]):.1f}° target={s["target_rpm"]:.0f}rpm limited={s["governor_saturated"]} tipMach={s["tip_mach"]:.2f}   Direct: {owners}\nSurfaces: {surfaces}')
 
 
 def delivery_checks(viewer):
@@ -234,6 +324,20 @@ def delivery_checks(viewer):
         press(key);release(key)
     tap('r')
     assert all(not v for k,v in viewer.plt.rcParams.items() if k.startswith('keymap.'))
+    # Exercise keys through real aero/control chains, then verify the plotted nose.
+    mode=core.state['controller']
+    core.command('controller off')
+    for key,sign in [('q',-1),('e',1)]:
+        tap('r');press(key)
+        state=viewer.advance(24)
+        assert state['ownership'][2]['command']==sign
+        assert state['omega'][2]*sign>0
+        nose=display_vector(rotate([1,0,0],state['quaternion']))
+        assert math.atan2(nose[0],nose[1])*sign>0
+        release(key)
+    basis=np.array([display_vector(v) for v in np.eye(3)])
+    assert np.allclose(np.cross(basis[0],basis[1]),basis[2])
+    core.command('controller '+mode);tap('r')
     for key in ['left','right','up','down','q','e']:press(key)
     state=viewer.advance(1)
     assert all(o['direct_weight']==1 and o['command']==0 for o in state['ownership'])
@@ -324,6 +428,7 @@ def delivery_checks(viewer):
     assert all(e['section']==1 and not e['failed'] for e in core.state['edges']) and not core.state['pitch_jammed']
     report={'backend':'Agg','core':'live C++ 120 Hz','propeller_model':core.state['propeller_model'],'human_gui_verified':False,
             'checks':{'shortcut_conflicts':True,'opposing_keys_per_axis':True,'action_press_repeat':True,
+                      'qe_actual_yaw_and_right_handed_display':True,
                       'throttle_trim_rpm_inputs':True,'reset_clears_and_blocks_held_input':True,
                       'focus_loss_releases_and_pauses':True,'pause_resume_fixed_ticks_no_backlog':True,
                       'damage_reset_controls':True},'native_tk_repeat_idle_queue':tk_repeat}
@@ -418,9 +523,14 @@ def main():
         else:
             if matplotlib.get_backend().lower()!='tkagg':
                 raise SystemExit('This delivery uses TkAgg focus handling. Start with MPLBACKEND=TkAgg on a desktop with Tk, or use --smoke in Cloud.')
-            from matplotlib.animation import FuncAnimation
             viewer=Viewer(core,plt)
-            animation=FuncAnimation(viewer.fig,viewer.frame,interval=33,cache_frame_data=False)
-            plt.show()
-            _=animation
+            try:
+                viewer.enable_blit()
+                viewer.timer=viewer.fig.canvas.new_timer(interval=33)
+                viewer.timer.add_callback(viewer.display_frame)
+                viewer.timer.start()
+                plt.show()
+            finally:
+                viewer.close()
+                plt.close(viewer.fig)
 if __name__=='__main__':main()

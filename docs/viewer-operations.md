@@ -4,6 +4,26 @@
 
 ## 最小启动
 
+### Windows PowerShell
+
+在仓库根目录执行。需要 PATH 中有支持 C++20 的 `g++`，以及可创建虚拟环境、带 Tk 的 Python。以下命令只构建 viewer 所需的 C++ 程序，不依赖 `make`，也不激活或修改全局 Python 环境：
+
+```powershell
+New-Item -ItemType Directory -Force build, results | Out-Null
+g++ -std=c++20 -O2 -g -Wall -Wextra -Wpedantic -Iinclude src/core.cpp src/propeller.cpp src/live.cpp -o build/flight-live.exe
+# 确认编译成功后继续；PowerShell 不会自动在外部命令失败时停止。
+python -m venv .venv-viewer
+.venv-viewer/Scripts/python.exe -m pip install --no-cache-dir -r requirements-viewer.txt
+.venv-viewer/Scripts/python.exe -c "import tkinter; print('Tk', tkinter.TkVersion)"
+.venv-viewer/Scripts/python.exe tools/viewer.py --smoke
+$env:MPLBACKEND = 'TkAgg'
+.venv-viewer/Scripts/python.exe tools/viewer.py
+```
+
+每条命令成功后再执行下一条；冒烟测试应输出 `PASS`，并生成下文的 JSON 和 PNG。已有 `.venv-viewer` 时可跳过创建；依赖已安装时可跳过安装。若 `python3` 在 Windows 上指向应用商店别名，使用这里的 `python` 和虚拟环境解释器路径。
+
+### bash / Linux 桌面
+
 以下命令在仓库根目录、使用 bash 的桌面环境执行。需要 C++20 GCC、GNU make、Python 3 和该 Python 的 Tk 绑定。Matplotlib 安装在仓库局部虚拟环境，环境目录已忽略，不修改全局 Python：
 
 ```sh
@@ -14,11 +34,29 @@ python3 -m venv .venv-viewer
 MPLBACKEND=TkAgg .venv-viewer/bin/python tools/viewer.py
 ```
 
-缺少 `tkinter` 时，需要使用带 Tk 的 Python 或自行配置系统 Tk；pip 的 Matplotlib 依赖不会安装系统 Tk。Linux GUI 还需要桌面显示连接。本次交付明确使用 TkAgg，因为其 FocusOut 接口已接入；其他交互 backend 未作为交付入口。退出时关闭窗口，C++ 子进程随之关闭。
+缺少 `tkinter` 时，需要使用带 Tk 的 Python 或自行配置系统 Tk；pip 的 Matplotlib 依赖不会安装系统 Tk。Linux GUI 还需要桌面显示连接。本次交付明确使用 TkAgg，因为其 FocusOut 接口已接入；其他交互 backend 未作为交付入口。退出时关闭窗口，刷新定时器与待处理按键回调停止，C++ 子进程随之关闭。若子进程在 0.5 秒内不响应退出，先 terminate，再在必要时 kill，并回收进程和通信管道。清理只针对 viewer 自己启动的核心进程。
+
+### 播放性能与退出检查
+
+viewer 复用 cells、力箭头、航迹点与结构条形对象；TkAgg 缓存静态背景，仅重绘动态对象。窗口缩放或相机变化导致完整重绘时会刷新缓存。HUD 的 `FPS` 显示相邻刷新回调的实际频率；刷新以约 30 FPS 为目标，并扣除本帧执行时间，不在绘制结束后额外等待完整 33 ms。物理仍为 120 Hz，不以减少物理 tick 或 cells 换取 FPS。
+
+依赖上限现在是 `matplotlib<3.11`：本机 3.11.2 的 Agg 逐字形文字绘制对长遥测 HUD 开销显著较高。已有环境也应重新执行安装命令，以应用此约束。
+
+2026-10-15 Windows 本机定向测量：旧路径重建图表约 47.9 ms、完整渲染约 423.0 ms，四个物理 tick 加通信约 7.5 ms。复用对象、局部重绘、静态帮助文字与 Matplotlib 3.10.9 后，Agg 分项中位数约 2.0 ms 更新、38.7 ms 渲染、7.0 ms 四 tick 通信／积分。原生 Tk 短运行含缩放与实际调度约 13.8 FPS；这是本机自动检查，不是所有硬件达到 30 FPS 或人工手感通过的保证。原生窗口关闭后 Python 测试入口正常退出、核心进程回收、定时器停止。
+
+退出回归可在仓库根目录执行；第二条需要可用的桌面 Tk，会短暂创建测试窗口：
+
+```powershell
+.venv-viewer/Scripts/python.exe tests/live_client_tests.py
+.venv-viewer/Scripts/python.exe tests/viewer_gui_tests.py
+```
+
+Linux 对应使用 `.venv-viewer/bin/python`。前者涵盖正常退出、重复清理、核心已退出，以及子进程不响应退出命令的强制终止；后者运行真实 Tk 定时器和缩放／重绘，再关窗检查核心退出和定时器停止。VS Code 的 Python 语言服务属于编辑器进程，不由 viewer 关闭。
 
 Cloud 无桌面时可运行：
 
 ```sh
+mkdir -p results
 .venv-viewer/bin/python tools/viewer.py --smoke
 ```
 
@@ -57,7 +95,7 @@ Cloud 无桌面时可运行：
 
 ## 看哪些遥测
 
-左图显示当前姿态、附着 cells 和抽样局部气动力箭头；红色表示丢失气动面积，橙色表示局部失速。它围绕当前 CG 显示，没有地形／追尾相机，也不绘制脱离部件。气动力箭头每帧归一化，仅表示方向和当帧相对大小。
+左图显示当前姿态、附着 cells 和抽样局部气动力箭头；红色表示丢失气动面积，橙色表示局部失速。它围绕当前 CG 显示，没有地形／追尾相机，也不绘制脱离部件。绘图轴采用右手 ENU（x 东、y 北、z 上），由核心 NED（北、东、下）转换，避免原“北／东／上”排列造成的镜像。Q 请求机头左偏航，E 请求机头右偏航；这是相对飞机自身的方向，不是固定的屏幕左右。气动力箭头每帧归一化，仅表示方向和当帧相对大小。
 
 右上红色 + 是 aim，蓝色圆点是由核心速度减去风得到的实际空中航迹；图例显示实际 heading/elevation 数值。超出面板范围时圆点会被裁切，数值仍显示。它不以机头姿态代替速度方向。右下显示结构连接的实际等效应力／极限强度，虚线为 1，横轴显示截断于 3；超过 1 并不代表瞬时断裂，塑性应变和连通性决定后续结果。HUD 显示模拟时间、空速、高度、G、实际／目标 RPM、桨距、限制状态、tip Mach、实际舵面、trim 请求、逐轴 direct 权重和脱离部件数。暂停时 HUD 的 ownership 是上一个物理 tick 的状态，恢复后的物理 tick 才开始交还。
 
@@ -65,11 +103,38 @@ Cloud 无桌面时可运行：
 
 ## 建议人工检查
 
-1. 从干净配平开始，点击不同 heading/elevation；观察实际速度方向、舵面与能量变化，记录延迟、过冲和手感，不假设所有轨迹请求可达。
-2. 鼠标 aim 保持不变，单轴键盘接管、同时按相反键、松开交还；检查其他轴仍由 Instructor 操作。
-3. 按住操纵键时暂停、重置和 Alt-Tab，松开旧键再恢复；确认无粘键、重复切换或追赶突跳。检查 Tk 的平台按键重复、PgUp/PgDn 和焦点行为。
-4. 调整油门、三个 trim 与目标 RPM，再分别注入 F2/F3/F5/F6/F7，观察真实剩余能力。F4 不保证一次低速拉杆就断翼；必须由载荷和渐进失效产生结果。
-5. 记录实际显示 backend、键盘布局、是否能持续实时播放，以及操纵响应是否便于理解。不要把离线图和自动断言当作人工手感结论。
+默认使用 `validation-bem.airframe` 和 `flightpath` 控制器。先完成冒烟测试，再按下表检查；各损伤项之间按 R 重置，避免多个损伤混合导致难以判断。若当前暂停，点击画布后按 Space 继续。
+
+| 检查 | 操作 | 预期结果／需要记录 |
+|---|---|---|
+| 干净配平 | 启动后不输入，观察约 10 秒模拟时间 | 高度、空速接近初值；记录明显漂移、抖动或错误信息 |
+| 鼠标航迹 | 在右上面板点击 heading 90°、elevation 0° 附近，观察约 30 秒模拟时间 | 蓝点逐渐跟随红色 aim，实际舵面变化；记录响应延迟、过冲、空速和高度变化。允许暂时掉高，这不是高度锁定 |
+| 逐轴接管 | 保持 aim，按住左箭头，再同时按右箭头，随后全部松开；再试俯仰和 Q/E | 只有对应轴的 direct 权重变为 1；相反键同时按时净请求为零但仍接管；松开后约 0.25 秒交还 |
+| 焦点／暂停／重置 | 按住操纵键时分别试 Space、R、Alt-Tab 和指针移出，再松键、点击画布、恢复 | 无粘键；失焦暂停；暂停期间模拟时间冻结，恢复无补跑突跳；R 清损伤并保持控制器／调速器／暂停选择 |
+| 连续键／切换键 | 长按 W/S、配平和 PgUp/PgDn；另长按 G、M | 连续请求受范围限制；G/M 每次实际按下只切换一次。记录键盘布局、重复或漏键 |
+| 气动／控制损伤 | 分别重置后试 F2、F3、F5，并与干净状态执行相同输入 | F2 左外翼出现红色缺损且不直接脱落；F3/F5 降低相应实际控制能力，Instructor 不能绕过断链 |
+| 发动机／桨距损伤 | 分别重置后试 F6、F7；F7 后改变油门或目标 RPM | F6 功率能力下降；F7 桨距保持卡死值，目标 RPM 仍可变化，实际 RPM 不保证跟随目标 |
+| 结构弱化 | 重置后 F4，比较正常飞行与拉杆时的结构利用率、失效和脱离数 | 弱化由实际载荷推进；不保证一次低速拉杆就断翼。可重复的延迟失效由下文自动场景检查 |
+| 播放性能 | 观察模拟时间与墙钟时间，调整窗口大小并持续操纵 | 记录能否接近实时、输入延迟及卡顿；慢渲染允许模拟变慢，物理步长保持不变 |
+
+反馈可直接按这个格式发回，不必另建报告：`系统／Python 与 Matplotlib 版本／backend／键盘布局；检查项；操作顺序；预期与实际；是否可重现；模拟时间与关键 HUD 数值`。附截图或报错有助于定位。不要把离线图和自动断言当作人工手感结论。
+
+## 完整自动回归（bash / GNU make 环境）
+
+如需复核核心与模型证据，在已有 GCC、GNU make、Python 的 Linux／WSL 环境执行；viewer 使用该环境自己的 `.venv-viewer/bin/python`，不要与 Windows 虚拟环境混用：
+
+```sh
+python3 tools/experiments.py
+make -j2 test
+python3 tools/instructor_experiments.py
+python3 tools/propulsion_experiments.py
+python3 tools/rotor_experiments.py
+.venv-viewer/bin/python tools/viewer.py --smoke
+# 可选：绘制实验曲线
+.venv-viewer/bin/python tools/plot_results.py
+```
+
+所有命令应正常退出；最新判据和数值分别见 `results/summary.json`、`instructor-summary.json`、`propulsion-summary.json`、`rotor-summary.json` 和 `viewer-input-summary.json`。旧推进模型的失败假设是保留的反例，不能要求其物理假设全部成立；入口脚本自身的验收失败才是回归异常。自动回归通过仍不代表完整 v0.1 或历史飞机真实性通过。
 
 ## spec 覆盖与剩余核心工作
 

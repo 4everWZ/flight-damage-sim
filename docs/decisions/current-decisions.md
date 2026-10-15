@@ -1,6 +1,6 @@
 # Current decisions and evidence status
 
-Updated: 2026-10-14. Core, Instructor and signed-propulsion iterations exist on a feature branch; this is not full v0.1 acceptance.
+Updated: 2026-10-15. Core, Instructor and signed-propulsion iterations exist on a feature branch; this is not full v0.1 acceptance.
 
 ## Authority and provenance
 
@@ -153,6 +153,12 @@ The first commit had no Actions runs/status checks. A minimal repository workflo
 `--smoke` dispatches actual Matplotlib events through the viewer and C++ transport. It checks conflicting/held/opposing keys, mode/governor press repeat, knobs, reset, focus loss, pause/resume/fractional tick and long presentation stall, damage/reset and rendering. A real headless Tcl idle queue verifies the native repeat coalescer when tkinter is available (present in Cloud). The repository-local virtual environment also passed the same smoke with its installed Matplotlib. No core force/control/structure model changed in this delivery step. The marked PNG and JSON are automatic evidence, not native window focus or human flight-feel results.
 
 Development stops at this review milestone. Desktop Tk focus/Alt-Tab, key repeat/layout, realtime performance, aim/control clarity and damaged handling are the actual outstanding human checks. Later core limitations stay in the current plan; no automatic full-game expansion is implied.
+
+Desktop review reported very low FPS and background memory after closing. Targeted Windows timing identified per-frame axes rebuilding/full rendering as the main cost, with long HUD text additionally expensive under installed Matplotlib 3.11.2. The viewer now reuses artists, blits dynamic layers over a cached background, leaves help text static and accounts for rendering time in its refresh timer. Viewer dependencies use `<3.11` following comparison with 3.10.9. Physics/control/telemetry semantics and fixed 120 Hz are unchanged. [Viewer operations](../viewer-operations.md) records measured timings and reproduction commands; the native short test measured ~13.8 FPS, so this is a measured improvement, not a 30 FPS guarantee or completed human handling acceptance.
+
+Closing the window stops its timer and pending key-release callbacks; normal exit and exceptional GUI unwinding close the owned core. Core cleanup is idempotent, bounds graceful wait and escalates terminate/kill if needed, then reaps the child and closes pipes. Real-process regressions cover normal, already-exited and unresponsive children; a desktop Tk integration test covers resize/redraw and window shutdown. These passed locally along with Agg input smoke. The two Python background processes observed during investigation were VS Code autopep8 language servers, not viewer/core remnants; they were preserved. Remote CI for this change has not been observed.
+
+Desktop review also reported reversed Q/E rudder response. Direct probes found the core signs correct (after 24 ticks, yaw rate ~−0.150 rad/s for Q and +0.150 rad/s for E); the viewer's North/East/Up projection was a reflection. Cell positions, force arrows and fuselage now consistently use right-handed East/North/Up display axes. Bindings and physical dynamics remain unchanged. Agg callbacks now check both actual yaw signs and displayed nose headings for Q/E, plus the display basis handedness; this passes locally. Human confirmation of the corrected view remains pending.
 
 ## How decisions change
 
