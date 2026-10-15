@@ -25,6 +25,9 @@ struct MassPart {
   int node = 0;
   double mass = 0;
   Vec position{}, inertia{};
+  std::string material_name; // Empty for non-removable carrier mass.
+  double remaining =
+      1; // Fraction of this explicitly defined material inventory.
 };
 struct MassProperties {
   double mass = 0;
@@ -170,6 +173,7 @@ struct DetachedCell {
               // axes.
 };
 struct DetachedBody {
+  std::string material_name; // Nonempty for removed material: no aero geometry.
   Body state;
   MassProperties mass;
   std::vector<int> cells, nodes; // Original definition indices, for provenance.
@@ -211,6 +215,7 @@ public:
                        const std::vector<double> &torsion, double elapsed);
   void damage_cell(int id, double area_fraction, double roughness);
   void weaken(const std::string &edge, double remaining_section);
+  void remove_material(const std::string &name, double remaining_fraction);
   void disconnect(const std::string &chain);
   TrimResult trim(double speed, double altitude);
   void reset_trim(const TrimResult &trim, double speed, double altitude);

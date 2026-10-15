@@ -9,16 +9,16 @@ MassProperties properties(const Definition &d, const std::vector<int> &nodes) {
   MassProperties m;
   for (auto &p : d.masses)
     if (std::find(nodes.begin(), nodes.end(), p.node) != nodes.end()) {
-      m.mass += p.mass;
-      m.cg += p.position * p.mass;
+      m.mass += p.mass * p.remaining;
+      m.cg += p.position * (p.mass * p.remaining);
     }
   if (m.mass <= 0)
     throw std::runtime_error("empty mass group");
   m.cg = m.cg / m.mass;
   for (auto &p : d.masses)
     if (std::find(nodes.begin(), nodes.end(), p.node) != nodes.end()) {
-      m.inertia += Mat::diagonal(p.inertia);
-      m.inertia += parallel_axis(p.mass, p.position - m.cg);
+      m.inertia += Mat::diagonal(p.inertia * p.remaining);
+      m.inertia += parallel_axis(p.mass * p.remaining, p.position - m.cg);
     }
   return m;
 }
@@ -135,9 +135,12 @@ Definition Definition::load(const std::string &path) {
     s >> tag;
     if (tag.empty() || tag[0] == '#')
       continue;
-    if (tag == "mass") {
+    if (tag == "mass" || tag == "material") {
       MassPart p;
-      s >> p.node >> p.mass >> p.position.x >> p.position.y >> p.position.z >>
+      s >> p.node;
+      if (tag == "material")
+        s >> p.material_name;
+      s >> p.mass >> p.position.x >> p.position.y >> p.position.z >>
           p.inertia.x >> p.inertia.y >> p.inertia.z;
       d.masses.push_back(p);
     } else if (tag == "node") {
@@ -254,6 +257,26 @@ Definition Definition::load(const std::string &path) {
     if (!node_valid(m.node) || m.mass <= 0 || m.inertia.x <= 0 ||
         m.inertia.y <= 0 || m.inertia.z <= 0)
       throw std::runtime_error("invalid mass");
+  std::vector<std::string> materials;
+  for (const auto &part : d.masses)
+    if (!part.material_name.empty()) {
+      if (std::find(materials.begin(), materials.end(), part.material_name) !=
+          materials.end())
+        throw std::runtime_error("duplicate material name");
+      materials.push_back(part.material_name);
+      bool carrier =
+          std::any_of(d.masses.begin(), d.masses.end(), [&](const MassPart &p) {
+            return p.node == part.node && p.material_name.empty();
+          });
+      if (!carrier)
+        throw std::runtime_error(
+            "removable material needs a non-removable node carrier");
+      if (part.inertia.x > part.inertia.y + part.inertia.z ||
+          part.inertia.y > part.inertia.x + part.inertia.z ||
+          part.inertia.z > part.inertia.x + part.inertia.y)
+        throw std::runtime_error(
+            "material inertia violates triangle inequality");
+    }
   for (auto &c : d.chains)
     if (c.axis < Roll || c.axis > Yaw || c.limit <= 0 || c.slew <= 0 ||
         c.q_limit <= 0)
@@ -920,7 +943,7 @@ void Simulation::assemble_structural_loads(const Wrench &forces) {
       Vec r = part.position - mass.cg;
       Vec relief = -(forces.force / mass.mass + cross(angular_accel, r) +
                      cross(body.omega, cross(body.omega, r))) *
-                   part.mass;
+                   (part.mass * part.remaining);
       Vec moment = cross(part.position, relief);
       node_bending[part.node] += moment.x;
       node_torsion[part.node] += moment.y;
@@ -979,6 +1002,72 @@ void Simulation::damage_cell(int id, double area, double roughness) {
           element.cell.area_fraction = c->area_fraction;
           element.cell.roughness = c->roughness;
         }
+}
+void Simulation::remove_material(const std::string &name, double remaining) {
+  auto it = std::find_if(def.masses.begin(), def.masses.end(),
+                         [&](const MassPart &p) {
+                           return !name.empty() && p.material_name == name;
+                         });
+  if (it == def.masses.end() || !std::isfinite(remaining) || remaining < 0 ||
+      remaining > it->remaining)
+    throw std::runtime_error("invalid material removal (no restoration)");
+  if (remaining == it->remaining)
+    return;
+  std::size_t id = it - def.masses.begin();
+  int owner = -1;
+  std::vector<int> nodes;
+  if (def.nodes[it->node].attached) {
+    for (int n = 0; n < int(def.nodes.size()); ++n)
+      if (def.nodes[n].attached)
+        nodes.push_back(n);
+  } else {
+    for (std::size_t n = 0; n < debris.size(); ++n)
+      if (std::find(debris[n].nodes.begin(), debris[n].nodes.end(), it->node) !=
+          debris[n].nodes.end()) {
+        owner = int(n);
+        nodes = debris[n].nodes;
+        break;
+      }
+    if (owner < 0)
+      throw std::runtime_error("material has no rigid owner");
+  }
+  // Compute first: invalid requests never partially change live
+  // inventory/state.
+  Definition updated = def;
+  updated.masses[id].remaining = remaining;
+  auto next_mass = properties(updated, nodes);
+  const Body old_body = owner < 0 ? body : debris[owner].state;
+  const MassProperties old_mass = owner < 0 ? mass : debris[owner].mass;
+  double removed_fraction = it->remaining - remaining;
+  DetachedBody parcel;
+  parcel.material_name = name;
+  parcel.mass = {it->mass * removed_fraction, it->position,
+                 Mat::diagonal(it->inertia * removed_fraction)};
+  parcel.state = old_body;
+  Vec removed_offset = parcel.mass.cg - old_mass.cg;
+  parcel.state.position += old_body.attitude.rotate(removed_offset);
+  parcel.state.velocity +=
+      old_body.attitude.rotate(cross(old_body.omega, removed_offset));
+  Body next_body = old_body;
+  Vec offset = next_mass.cg - old_mass.cg;
+  next_body.position += old_body.attitude.rotate(offset);
+  next_body.velocity += old_body.attitude.rotate(cross(old_body.omega, offset));
+  def.masses[id].remaining = remaining;
+  if (owner < 0) {
+    body = next_body;
+    mass = next_mass;
+    // Preserve the fixed-tick sensor sampling schedule. Re-express cached
+    // loads about the new CG instead of evaluating guidance sensors off-tick.
+    aero.moment = aero.moment - cross(offset, aero.force);
+    propulsion.moment = propulsion.moment - cross(offset, propulsion.force);
+    load_factor = -aero.force.z / (mass.mass * gravity);
+  } else {
+    debris[owner].state = next_body;
+    debris[owner].mass = next_mass;
+    debris[owner].aero.moment =
+        debris[owner].aero.moment - cross(offset, debris[owner].aero.force);
+  }
+  debris.push_back(parcel);
 }
 void Simulation::weaken(const std::string &name, double section) {
   auto e = std::find_if(def.edges.begin(), def.edges.end(),

@@ -77,6 +77,19 @@ struct Mat {
   }
   Vec solve(Vec v) const {
     auto m = a;
+    // Solve the same linear problem independently of the inertia's mass/unit
+    // scale. An absolute pivot threshold rejects small but well-shaped bodies.
+    double scale = 0;
+    for (const auto &row : m)
+      for (double value : row)
+        scale = std::max(scale, std::abs(value));
+    if (!std::isfinite(scale) || scale == 0)
+      throw std::runtime_error("singular inertia");
+    for (int i = 0; i < 3; ++i) {
+      v[i] /= scale;
+      for (int j = 0; j < 3; ++j)
+        m[i][j] /= scale;
+    }
     for (int i = 0; i < 3; ++i) {
       int p = i;
       for (int j = i + 1; j < 3; ++j)
