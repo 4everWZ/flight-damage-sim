@@ -99,6 +99,8 @@ mkdir -p results
 
 右上红色 + 是 aim，蓝色圆点是由核心速度减去风得到的实际空中航迹；图例显示实际 heading/elevation 数值。超出面板范围时圆点会被裁切，数值仍显示。它不以机头姿态代替速度方向。右下显示结构连接的实际等效应力／极限强度，虚线为 1，横轴显示截断于 3；超过 1 并不代表瞬时断裂，塑性应变和连通性决定后续结果。HUD 显示模拟时间、空速、高度、G、实际／目标 RPM、桨距、限制状态、tip Mach、实际舵面、trim 请求、逐轴 direct 权重和脱离部件数。暂停时 HUD 的 ownership 是上一个物理 tick 的状态，恢复后的物理 tick 才开始交还。
 
+舵机 `deflection`／HUD 实际舵位是当前 tick 的步末状态；积分得到的 cell 力及其 `deflection` 诊断取同一 tick 的中点舵位。两者在快速运动时会有半步差异，不能把步末位置直接当成本步全程的施力位置。独立即时气动力求值和配平使用当前舵位。
+
 默认 `validation-bem.airframe` 是未标定的合成验证体。可用 `--controller legacy` / `--controller off` 比较同一推进模型上的 guidance；`--airframe validation.airframe` 使用保留的旧推进模型，此时 G/F7 无调速器作用。旧模型三个失败反例仍见 `tools/propulsion_experiments.py`。
 
 ## 建议人工检查

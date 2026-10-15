@@ -119,6 +119,34 @@ Wrench cell_load(const Definition &def, AeroCell &c, Vec local, Vec r,
   }
   return result;
 }
+double trimmed_command(double axis_command, double trim, bool enabled) {
+  return clamp(axis_command +
+                   (enabled ? trim * (1 - std::abs(axis_command)) : 0),
+               -1, 1);
+}
+void advance_surface(ControlChain &c, double command, double q,
+                     double elapsed) {
+  if (c.jammed) {
+    c.deflection = c.filtered = clamp(c.jam_position, -c.limit, c.limit);
+    return;
+  }
+  double target = c.connected ? command * c.limit * clamp(c.range, 0, 1) : 0;
+  if (c.lag > 0)
+    c.filtered += (target - c.filtered) * (1 - std::exp(-elapsed / c.lag));
+  else
+    c.filtered = target;
+  double effort = 1 / (1 + q / c.q_limit);
+  double travel = c.slew * effort * elapsed / (1 + std::max(c.friction, 0.));
+  c.deflection += clamp(c.filtered * effort - c.deflection, -travel, travel);
+}
+void sample_surface(ControlChain &c, double command, double q, double elapsed) {
+  // Both samples start from the same actual linkage state. Advancing twice by
+  // half a step would change the existing lag+slew endpoint approximation.
+  auto midpoint = c;
+  advance_surface(midpoint, command, q, elapsed * .5);
+  advance_surface(c, command, q, elapsed);
+  c.midpoint_deflection = midpoint.deflection;
+}
 Quat orientation(double alpha) { return Quat::axis({0, 1, 0}, alpha); }
 } // namespace
 Definition Definition::load(const std::string &path) {
@@ -446,29 +474,9 @@ void Simulation::update_controls(const PilotIntent &p) {
   }
   double q = .5 * density * dot(vb, vb);
   for (auto &c : def.chains) {
-    double direct_command = ownership[c.axis].command;
-    double command =
-        direct_command + (def.trim_enabled[c.axis]
-                              ? p.trim[c.axis] * (1 - std::abs(direct_command))
-                              : 0);
-    command = clamp(command, -1, 1);
-    if (c.jammed) {
-      c.deflection = clamp(c.jam_position, -c.limit, c.limit);
-      c.filtered = c.deflection;
-      continue;
-    }
-    double target_def =
-        c.connected ? command * c.limit * clamp(c.range, 0, 1) : 0;
-    if (c.lag > 0)
-      c.filtered += (target_def - c.filtered) * (1 - std::exp(-dt / c.lag));
-    else
-      c.filtered = target_def;
-    // Mechanical effort limits response/range as hinge load rises; disconnected
-    // surfaces relax to zero.
-    double effort = 1 / (1 + q / c.q_limit);
-    double max_step = c.slew * effort * dt / (1 + std::max(c.friction, 0.));
-    c.deflection +=
-        clamp(c.filtered * effort - c.deflection, -max_step, max_step);
+    double command = trimmed_command(ownership[c.axis].command, p.trim[c.axis],
+                                     def.trim_enabled[c.axis]);
+    sample_surface(c, command, q, dt);
   }
 }
 void advance_propulsion(Engine &e, double density, double altitude, double v,
@@ -551,6 +559,10 @@ void Simulation::update_engine(const PilotIntent &p) {
   }
 }
 Wrench Simulation::evaluate(const Body &b, bool store) {
+  return evaluate_forces(b, store, false);
+}
+Wrench Simulation::evaluate_forces(const Body &b, bool store,
+                                   bool midpoint_controls) {
   double rho = 1.225 * std::exp(b.position.z / 8500.);
   Vec vb = b.attitude.conjugate().rotate(b.velocity - wind_world);
   PropellerLoads blades;
@@ -569,7 +581,7 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
                            2 * std::max(def.engine.thrust, 0.) / (rho * disk)) -
                  std::abs(vb.x));
   }
-  Wrench a = evaluate_airframe(b, wake, store);
+  Wrench a = evaluate_airframe(b, wake, store, midpoint_controls);
   if (def.engine.model == PropellerModel::Legacy) {
     prop.add({def.engine.thrust, 0, 0}, def.engine.position - mass.cg,
              {-def.engine.torque, 0, 0});
@@ -593,7 +605,8 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
   a.moment += prop.moment;
   return a;
 }
-Wrench Simulation::evaluate_airframe(const Body &b, double wake, bool store) {
+Wrench Simulation::evaluate_airframe(const Body &b, double wake, bool store,
+                                     bool midpoint_controls) {
   double rho = 1.225 * std::exp(b.position.z / 8500.);
   Vec vb = b.attitude.conjugate().rotate(b.velocity - wind_world);
   Wrench a;
@@ -607,10 +620,13 @@ Wrench Simulation::evaluate_airframe(const Body &b, double wake, bool store) {
     double flow_sign = (dot(vb, def.engine.axis) + wake) >= 0 ? 1 : -1;
     if (along * flow_sign < 0 && side < def.engine.prop_radius)
       local += def.engine.axis * wake;
-    double deflection = c.chain >= 0
-                            ? def.chains[c.chain].deflection *
-                                  def.chains[c.chain].hinge * c.control_sign
-                            : 0;
+    double deflection = 0;
+    if (c.chain >= 0) {
+      const auto &chain = def.chains[c.chain];
+      deflection =
+          (midpoint_controls ? chain.midpoint_deflection : chain.deflection) *
+          chain.hinge * c.control_sign;
+    }
     auto cell =
         cell_load(def, c, local, r, rho, cell_frame(def, c), deflection, store);
     a.force += cell.force;
@@ -975,7 +991,7 @@ Wrench Simulation::evaluate_detached(DetachedBody &piece, bool store) {
   return detached_load(piece, piece.state, store);
 }
 Wrench Simulation::detached_load(DetachedBody &piece, const Body &state,
-                                 bool store) {
+                                 bool store, bool midpoint_controls) {
   Vec vb = state.attitude.conjugate().rotate(state.velocity - wind_world);
   double rho = 1.225 * std::exp(state.position.z / 8500.);
   Wrench result;
@@ -983,10 +999,13 @@ Wrench Simulation::detached_load(DetachedBody &piece, const Body &state,
     auto &cell = element.cell;
     Vec r = cell.position - piece.mass.cg;
     Vec local = vb + cross(state.omega, r);
-    double angle = cell.chain >= 0
-                       ? piece.chains[cell.chain].deflection *
-                             piece.chains[cell.chain].hinge * cell.control_sign
-                       : 0;
+    double angle = 0;
+    if (cell.chain >= 0) {
+      const auto &chain = piece.chains[cell.chain];
+      angle =
+          (midpoint_controls ? chain.midpoint_deflection : chain.deflection) *
+          chain.hinge * cell.control_sign;
+    }
     auto load =
         cell_load(def, cell, local, r, rho, element.frame, angle, store);
     result.force += load.force;
@@ -1042,49 +1061,37 @@ void Simulation::step(const PilotIntent &p) {
     Vec v = piece.state.velocity - wind_world;
     double rho = 1.225 * std::exp(piece.state.position.z / 8500.);
     double q = .5 * rho * dot(v, v);
-    for (auto &chain : piece.chains) {
-      if (chain.jammed) {
-        chain.deflection = chain.filtered =
-            clamp(chain.jam_position, -chain.limit, chain.limit);
-      } else {
-        // Same reduced neutral relaxation as a disconnected parent linkage.
-        chain.filtered =
-            chain.lag > 0 ? chain.filtered * std::exp(-dt / chain.lag) : 0;
-        double effort = 1 / (1 + q / chain.q_limit);
-        double travel =
-            chain.slew * effort * dt / (1 + std::max(chain.friction, 0.));
-        chain.deflection +=
-            clamp(chain.filtered * effort - chain.deflection, -travel, travel);
-      }
-    }
+    for (auto &chain : piece.chains)
+      sample_surface(chain, 0, q,
+                     dt); // Unpowered local branch or mechanical jam.
     Body midpoint;
     BodyLoad loads = [&](const Body &trial) {
       midpoint = trial;
-      return detached_load(piece, trial, false);
+      return detached_load(piece, trial, false, true);
     };
     integrate_body(piece.state, piece.mass, loads, dt);
-    detached_load(piece, midpoint, true);
+    detached_load(piece, midpoint, true, true);
   }
   Body midpoint;
   double spin0 = def.engine.rpm * 2 * pi / 60;
   if (def.engine.model == PropellerModel::Legacy) {
     BodyLoad loads = [&](const Body &trial) {
       midpoint = trial;
-      return evaluate(trial, false);
+      return evaluate_forces(trial, false, true);
     };
     integrate_body(body, mass, loads, dt);
-    evaluate(midpoint, true);
+    evaluate_forces(midpoint, true, true);
   } else {
     PropellerLoads blades;
     RotorAirframeLoad loads = [&](const Body &trial,
                                   const PropellerLoads &prop) {
       midpoint = trial;
       blades = prop;
-      return evaluate_airframe(trial, prop.induced, false);
+      return evaluate_airframe(trial, prop.induced, false, true);
     };
     rotor_step = integrate_rotor_body(body, mass, def.engine, {}, wind_world,
                                       density, dt, loads);
-    evaluate_airframe(midpoint, blades.induced, true);
+    evaluate_airframe(midpoint, blades.induced, true, true);
     propulsion = {};
     propulsion.add(blades.at_mount.force, def.engine.position - mass.cg,
                    blades.at_mount.moment);
