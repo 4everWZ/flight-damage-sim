@@ -562,35 +562,14 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
     prop.add(blades.at_mount.force, def.engine.position - mass.cg,
              blades.at_mount.moment);
   }
-  Wrench a;
-  for (auto &c : def.cells) {
-    if (!c.attached)
-      continue;
-    Vec r = c.position - mass.cg, local = vb + cross(b.omega, r);
-    Vec from_prop = c.position - def.engine.position;
-    double wake =
-        def.engine.model == PropellerModel::BladeElement ? blades.induced : 0;
-    if (def.engine.model == PropellerModel::Legacy) {
-      double disk = pi * def.engine.prop_radius * def.engine.prop_radius;
-      wake = .5 * (std::sqrt(vb.x * vb.x + 2 * std::max(def.engine.thrust, 0.) /
-                                               (rho * disk)) -
-                   std::abs(vb.x));
-    }
-    double along = dot(from_prop, def.engine.axis),
-           side = norm(from_prop - def.engine.axis * along);
-    double flow_sign = (dot(vb, def.engine.axis) + wake) >= 0 ? 1 : -1;
-    if (along * flow_sign < 0 && side < def.engine.prop_radius)
-      local += def.engine.axis * wake;
-    double deflection = c.chain >= 0
-                            ? def.chains[c.chain].deflection *
-                                  def.chains[c.chain].hinge * c.control_sign
-                            : 0;
-    auto cell =
-        cell_load(def, c, local, r, rho, cell_frame(def, c), deflection, store);
-    a.force += cell.force;
-    a.moment += cell.moment;
+  double wake = blades.induced;
+  if (def.engine.model == PropellerModel::Legacy) {
+    double disk = pi * def.engine.prop_radius * def.engine.prop_radius;
+    wake = .5 * (std::sqrt(vb.x * vb.x +
+                           2 * std::max(def.engine.thrust, 0.) / (rho * disk)) -
+                 std::abs(vb.x));
   }
-  a.add(-unit(vb) * (.5 * rho * dot(vb, vb) * def.body_drag_area), -mass.cg);
+  Wrench a = evaluate_airframe(b, wake, store);
   if (def.engine.model == PropellerModel::Legacy) {
     prop.add({def.engine.thrust, 0, 0}, def.engine.position - mass.cg,
              {-def.engine.torque, 0, 0});
@@ -608,12 +587,40 @@ Wrench Simulation::evaluate(const Body &b, bool store) {
     e.tip_mach = blades.tip_mach;
   }
   if (store) {
-    aero = a;
     propulsion = prop;
-    load_factor = -a.force.z / (mass.mass * gravity);
   }
   a.force += prop.force;
   a.moment += prop.moment;
+  return a;
+}
+Wrench Simulation::evaluate_airframe(const Body &b, double wake, bool store) {
+  double rho = 1.225 * std::exp(b.position.z / 8500.);
+  Vec vb = b.attitude.conjugate().rotate(b.velocity - wind_world);
+  Wrench a;
+  for (auto &c : def.cells) {
+    if (!c.attached)
+      continue;
+    Vec r = c.position - mass.cg, local = vb + cross(b.omega, r);
+    Vec from_prop = c.position - def.engine.position;
+    double along = dot(from_prop, def.engine.axis),
+           side = norm(from_prop - def.engine.axis * along);
+    double flow_sign = (dot(vb, def.engine.axis) + wake) >= 0 ? 1 : -1;
+    if (along * flow_sign < 0 && side < def.engine.prop_radius)
+      local += def.engine.axis * wake;
+    double deflection = c.chain >= 0
+                            ? def.chains[c.chain].deflection *
+                                  def.chains[c.chain].hinge * c.control_sign
+                            : 0;
+    auto cell =
+        cell_load(def, c, local, r, rho, cell_frame(def, c), deflection, store);
+    a.force += cell.force;
+    a.moment += cell.moment;
+  }
+  a.add(-unit(vb) * (.5 * rho * dot(vb, vb) * def.body_drag_area), -mass.cg);
+  if (store) {
+    aero = a;
+    load_factor = -a.force.z / (mass.mass * gravity);
+  }
   return a;
 }
 void integrate_body(Body &b, const MassProperties &m, const Wrench &force,
@@ -653,14 +660,74 @@ void integrate_body(Body &b, const MassProperties &m, const Wrench &force,
   b.attitude = (b.attitude * delta).normalized();
   b.omega = next;
 }
+void integrate_body(Body &b, const MassProperties &m, const BodyLoad &loads,
+                    double dt) {
+  const Body initial = b;
+  std::vector<double> x{b.omega.x,    b.omega.y,    b.omega.z,
+                        b.velocity.x, b.velocity.y, b.velocity.z};
+  Body midpoint;
+  auto residual = [&](const std::vector<double> &v) {
+    Vec rates{v[0], v[1], v[2]}, velocity{v[3], v[4], v[5]};
+    midpoint = initial;
+    midpoint.omega = (initial.omega + rates) * .5;
+    midpoint.velocity = (initial.velocity + velocity) * .5;
+    midpoint.position += midpoint.velocity * (.5 * dt);
+    double angle = 2 * std::atan(.5 * norm(midpoint.omega) * dt);
+    midpoint.attitude =
+        (initial.attitude * Quat::axis(midpoint.omega, angle * .5))
+            .normalized();
+    auto force = loads(midpoint);
+    Vec angular =
+        rates - initial.omega -
+        m.inertia.solve(force.moment -
+                        cross(midpoint.omega, m.inertia * midpoint.omega)) *
+            dt;
+    Vec linear =
+        velocity - initial.velocity -
+        (midpoint.attitude.rotate(force.force) / m.mass + Vec{0, 0, gravity}) *
+            dt;
+    return std::vector<double>{angular.x, angular.y, angular.z,
+                               linear.x,  linear.y,  linear.z};
+  };
+  for (int it = 0; it < 12; ++it) {
+    auto f = residual(x);
+    double error = 0;
+    for (double v : f)
+      error += v * v;
+    if (std::sqrt(error) < 1e-10)
+      break;
+    std::vector<std::vector<double>> J(6, std::vector<double>(6));
+    for (int j = 0; j < 6; ++j) {
+      auto shifted = x;
+      double h = 1e-5 * std::max(1., std::abs(x[j]));
+      shifted[j] += h;
+      auto next = residual(shifted);
+      for (int i = 0; i < 6; ++i)
+        J[i][j] = (next[i] - f[i]) / h;
+    }
+    auto delta = linear_solve(J, f);
+    for (int j = 0; j < 6; ++j)
+      x[j] -= delta[j];
+    if (it == 11)
+      throw std::runtime_error("aerodynamic midpoint did not converge");
+  }
+  residual(x); // Leave callback diagnostics at the converged midpoint.
+  b.omega = {x[0], x[1], x[2]};
+  b.velocity = {x[3], x[4], x[5]};
+  b.position += midpoint.velocity * dt;
+  double angle = 2 * std::atan(.5 * norm(midpoint.omega) * dt);
+  b.attitude =
+      (initial.attitude * Quat::axis(midpoint.omega, angle)).normalized();
+}
 RotorStep integrate_rotor_body(Body &b, const MassProperties &m, Engine &e,
                                const Wrench &aero, Vec wind, double rho,
-                               double dt) {
+                               double dt, const RotorAirframeLoad &airframe) {
   const Body initial = b;
   double spin0 = e.rpm * 2 * pi / 60;
   std::vector<double> x{b.omega.x,    b.omega.y,    b.omega.z,   spin0,
                         b.velocity.x, b.velocity.y, b.velocity.z};
   PropellerLoads final_loads;
+  Wrench final_aero;
   Quat final_mid;
   Vec final_rates{}, final_velocity{};
   double final_spin = 0, final_q = 0;
@@ -677,7 +744,13 @@ RotorStep integrate_rotor_body(Body &b, const MassProperties &m, Engine &e,
                cross(mid_rates, e.position - m.cg);
     auto loads = propeller_loads(e, rho, flow, mid_rates, mid_spin);
     double motor = engine_shaft_torque(e, -initial.position.z, mid_spin);
-    Wrench external = aero;
+    Body midpoint = initial;
+    midpoint.position += mid_velocity * (.5 * dt);
+    midpoint.velocity = mid_velocity;
+    midpoint.omega = mid_rates;
+    midpoint.attitude = qmid;
+    Wrench current_aero = airframe ? airframe(midpoint, loads) : aero;
+    Wrench external = current_aero;
     external.add(loads.at_mount.force, e.position - m.cg,
                  loads.at_mount.moment);
     // Enforce the physical world-frame angular impulse using the same midpoint
@@ -697,6 +770,7 @@ RotorStep integrate_rotor_body(Body &b, const MassProperties &m, Engine &e,
         (qmid.rotate(external.force) / m.mass + Vec{0, 0, gravity}) * dt;
     if (record) {
       final_loads = loads;
+      final_aero = current_aero;
       final_mid = qmid;
       final_rates = mid_rates;
       final_velocity = mid_velocity;
@@ -746,7 +820,7 @@ RotorStep integrate_rotor_body(Body &b, const MassProperties &m, Engine &e,
   e.induction_converged = final_loads.converged;
   e.induction_residual = final_loads.momentum_residual;
   e.tip_mach = final_loads.tip_mach;
-  Wrench external = aero;
+  Wrench external = final_aero;
   external.add(final_loads.at_mount.force, e.position - m.cg,
                final_loads.at_mount.moment);
   RotorStep result;
@@ -898,14 +972,17 @@ void Simulation::update_mass_and_detach() {
   // linear/angular momentum is conserved at the split.
 }
 Wrench Simulation::evaluate_detached(DetachedBody &piece, bool store) {
-  Vec vb = piece.state.attitude.conjugate().rotate(piece.state.velocity -
-                                                   wind_world);
-  double rho = 1.225 * std::exp(piece.state.position.z / 8500.);
+  return detached_load(piece, piece.state, store);
+}
+Wrench Simulation::detached_load(DetachedBody &piece, const Body &state,
+                                 bool store) {
+  Vec vb = state.attitude.conjugate().rotate(state.velocity - wind_world);
+  double rho = 1.225 * std::exp(state.position.z / 8500.);
   Wrench result;
   for (auto &element : piece.aero_cells) {
     auto &cell = element.cell;
     Vec r = cell.position - piece.mass.cg;
-    Vec local = vb + cross(piece.state.omega, r);
+    Vec local = vb + cross(state.omega, r);
     double angle = cell.chain >= 0
                        ? piece.chains[cell.chain].deflection *
                              piece.chains[cell.chain].hinge * cell.control_sign
@@ -919,7 +996,8 @@ Wrench Simulation::evaluate_detached(DetachedBody &piece, bool store) {
     piece.aero = result;
   return result;
 }
-void Simulation::assemble_structural_loads(const Wrench &forces) {
+void Simulation::assemble_structural_loads(const Wrench &forces, Vec rates,
+                                           double spin) {
   std::fill(node_bending.begin(), node_bending.end(), 0);
   std::fill(node_torsion.begin(), node_torsion.end(), 0);
   for (auto &c : def.cells)
@@ -938,19 +1016,17 @@ void Simulation::assemble_structural_loads(const Wrench &forces) {
     for (int i = 0; i < 3; ++i)
       for (int j = 0; j < 3; ++j)
         effective.a[i][j] -= e.rotor_inertia * e.axis[i] * e.axis[j];
-    angular_accel =
-        effective.solve(forces.moment - e.axis * (e.torque - e.aero_torque) -
-                        cross(body.omega, mass.inertia * body.omega +
-                                              e.axis * (e.rotor_inertia *
-                                                        e.rpm * 2 * pi / 60)));
+    angular_accel = effective.solve(
+        forces.moment - e.axis * (e.torque - e.aero_torque) -
+        cross(rates, mass.inertia * rates + e.axis * (e.rotor_inertia * spin)));
   } else
-    angular_accel = mass.inertia.solve(
-        forces.moment - cross(body.omega, mass.inertia * body.omega));
+    angular_accel =
+        mass.inertia.solve(forces.moment - cross(rates, mass.inertia * rates));
   for (const auto &part : def.masses)
     if (def.nodes[part.node].attached) {
       Vec r = part.position - mass.cg;
       Vec relief = -(forces.force / mass.mass + cross(angular_accel, r) +
-                     cross(body.omega, cross(body.omega, r))) *
+                     cross(rates, cross(rates, r))) *
                    (part.mass * part.remaining);
       Vec moment = cross(part.position, relief);
       node_bending[part.node] += moment.x;
@@ -960,8 +1036,6 @@ void Simulation::assemble_structural_loads(const Wrench &forces) {
 void Simulation::step(const PilotIntent &p) {
   update_engine(p);
   update_controls(p);
-  auto forces = evaluate(body, true);
-  assemble_structural_loads(forces);
   // Existing pieces advance once from their OWN velocity/CG/rates and cells.
   // New pieces inherit the end-of-tick rigid state and start next tick.
   for (auto &piece : debris) {
@@ -983,14 +1057,41 @@ void Simulation::step(const PilotIntent &p) {
             clamp(chain.filtered * effort - chain.deflection, -travel, travel);
       }
     }
-    auto load = evaluate_detached(piece);
-    integrate_body(piece.state, piece.mass, load, dt);
+    Body midpoint;
+    BodyLoad loads = [&](const Body &trial) {
+      midpoint = trial;
+      return detached_load(piece, trial, false);
+    };
+    integrate_body(piece.state, piece.mass, loads, dt);
+    detached_load(piece, midpoint, true);
   }
-  if (def.engine.model == PropellerModel::Legacy)
-    integrate_body(body, mass, forces, dt);
-  else
-    rotor_step = integrate_rotor_body(body, mass, def.engine, aero, wind_world,
-                                      density, dt);
+  Body midpoint;
+  double spin0 = def.engine.rpm * 2 * pi / 60;
+  if (def.engine.model == PropellerModel::Legacy) {
+    BodyLoad loads = [&](const Body &trial) {
+      midpoint = trial;
+      return evaluate(trial, false);
+    };
+    integrate_body(body, mass, loads, dt);
+    evaluate(midpoint, true);
+  } else {
+    PropellerLoads blades;
+    RotorAirframeLoad loads = [&](const Body &trial,
+                                  const PropellerLoads &prop) {
+      midpoint = trial;
+      blades = prop;
+      return evaluate_airframe(trial, prop.induced, false);
+    };
+    rotor_step = integrate_rotor_body(body, mass, def.engine, {}, wind_world,
+                                      density, dt, loads);
+    evaluate_airframe(midpoint, blades.induced, true);
+    propulsion = {};
+    propulsion.add(blades.at_mount.force, def.engine.position - mass.cg,
+                   blades.at_mount.moment);
+  }
+  Wrench forces{aero.force + propulsion.force, aero.moment + propulsion.moment};
+  assemble_structural_loads(forces, midpoint.omega,
+                            .5 * (spin0 + def.engine.rpm * 2 * pi / 60));
   solve_structure(node_bending, node_torsion, dt);
   ++tick;
 }
@@ -1207,7 +1308,8 @@ TrimResult Simulation::trim(double speed, double altitude) {
     // material strain.
     for (int elastic = 0; elastic < 6; ++elastic) {
       auto trial = evaluate(body, true);
-      assemble_structural_loads(trial);
+      assemble_structural_loads(trial, body.omega,
+                                def.engine.rpm * 2 * pi / 60);
       solve_structure(node_bending, node_torsion, 0);
     }
     auto w = evaluate(body);
