@@ -6,15 +6,15 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15. PR #2–#4 have merged with observed successful post-merge main workflows. Their ownership, mass-transfer and PI-headroom claims were reviewed separately from CI. This iteration starts from merged main `5673156` and uses `feature/sensitivity-isolation`. Preserve user viewer changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Open drafts for review/checks, then merge eligible core work under the standing authorization and verify resulting main CI.
+The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15. PR #2–#5 have merged with observed successful post-merge main workflows. This iteration starts from merged main `c702fc7` and uses `feature/sensor-history`. The PR #5 numerical lift-work repair remains a local improvement, not acceptance of strong-roll fidelity. Preserve user viewer changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Open drafts for review/checks, then merge eligible core work under the standing authorization and verify resulting main CI.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
 ## Current bounded iteration
 
-Isolate the unresolved small-material-effect sensitivity with fixed normalized-request replays and event-time shifts, then repair demonstrated defects without tuning away a failed hypothesis. The independent pure-lift counterexample exposed first-order numerical work from old-state aerodynamic loads. Parent and detached cell loads now use the same solved midpoint state as rigid-body integration; rotor flight shares trial induced flow. Controller/governor and elastic updates remain once per fixed tick.
+Separate fixed sensor histories, controller internal updates, request hold, mechanical actuator updates and physical feedback at common time boundaries. The held-history experiment finds matching PI and actuator endpoints but different emitted/applied waveforms. A bounded surface timing repair now supplies the same interval's mechanical midpoint to the midpoint force solve while preserving actual endpoints and all controller laws. Analytic and genuine detached-cell checks support that local claim.
 
-Targeted energy/passivity, rotor conservation, real controls, material transfer and load-driven separation checks pass. Fixed-trim material response refines strongly, but native strong-roll 120/240 Hz disagreement remains ~0.128 m and still fails the original 10% criterion. The replay/event experiments narrow the dominant sensitivity to the closed-loop feedback/sampling path without identifying a unique remaining controller defect. Evidence and assumptions belong in [current decisions](../decisions/current-decisions.md#causal-sensitivity-isolation-and-midpoint-aerodynamic-work). Continue with held sensor-history sampling around roll release/saturation before changing gains.
+The original native strong-roll 120/240 Hz effect disagreement remains ~0.124 m, so its 10% hypothesis is still false. A separately labeled fresh-sensor/controller-at-120-Hz closed-loop intervention improves from ~0.0361 to ~0.00554 m disagreement after the repair; it does not replace the original sensor timing or acceptance metric. Continue by fixing the original load-sensor age during plant-only refinement, including the mass-change event, before separately reviewing any interpretation change. Full methodology and before/after reproduction live in [current decisions](../decisions/current-decisions.md#fixed-sensor-histories-digital-control-timing-and-surface-force-samples).
 
 ## Reproduce
 
@@ -27,6 +27,7 @@ python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py
 python3 tools/material_experiments.py
 python3 tools/control_experiments.py
+python3 tools/sensor_history_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
@@ -62,7 +63,7 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Next useful experiments
 
-1. Continue the bounded closed-loop sensitivity isolation with recorded sensor histories, especially roll release and saturation crossings. Request replay and event shifts now discriminate feedback sampling from held-input plant stepping; they do not uniquely establish a controller bug. Preserve the failed 10% hypothesis and avoid retuning gains before isolating a cause.
+1. Continue the bounded clock-locked closed-loop experiment while preserving the original load-sensor age. The fresh-read intervention is a useful discriminator but changes sensor timing. Define physical sample age and mass-boundary semantics before a separately reviewed interpretation change; preserve the original failed 10% hypothesis and current gains.
 2. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
 3. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.
 4. Extend material mass bookkeeping and spanwise graph geometry/load mapping, then test large skin loss, critical spar hits and secondary detached-piece fracture. Explicit named material removal now updates the current component and accounts for removed parcels; automatic geometric damage-to-material mapping and full structural materialization remain pending. Current generalized graph statics are not calibrated local beam stresses.
@@ -71,4 +72,4 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Blockers
 
-No known build/test blocker. PR #2–#4 post-merge main workflows passed; this iteration must observe its own PR and post-merge workflows. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.
+No known build/test blocker. PR #2–#5 post-merge main workflows passed; this iteration must observe its own PR and post-merge workflows. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.

@@ -55,6 +55,9 @@ struct ControlChain {
   double limit = rad(20), slew = rad(90), q_limit = 18000;
   double range = 1, friction = 0, lag = 0, hinge = 1, deflection = 0,
          filtered = 0;
+  // Force sample for the last advanced interval; deflection remains its
+  // endpoint.
+  double midpoint_deflection = 0;
   bool connected = true, jammed = false;
   double jam_position = 0;
 };
@@ -229,8 +232,11 @@ public:
   std::vector<double> node_bending, node_torsion;
 
 private:
-  Wrench evaluate_airframe(const Body &, double wake, bool store);
-  Wrench detached_load(DetachedBody &, const Body &, bool store);
+  Wrench evaluate_forces(const Body &, bool store, bool midpoint_controls);
+  Wrench evaluate_airframe(const Body &, double wake, bool store,
+                           bool midpoint_controls = false);
+  Wrench detached_load(DetachedBody &, const Body &, bool store,
+                       bool midpoint_controls = false);
   void update_engine(const PilotIntent &);
   void assemble_structural_loads(const Wrench &, Vec rates, double spin);
   void update_mass_and_detach();
