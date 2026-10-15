@@ -307,6 +307,196 @@ Body locked_controller(const Definition &d, int plant_hz, bool removed) {
   }
   return plant.body;
 }
+// A raw body-normal aerodynamic force sample, not a previously normalized G.
+// Each run uses integer ticks of 1/(2*plant_hz): completed force midpoints are
+// odd ticks; the fixed 1/240 s age is plant_hz/120 ticks. Linear reconstruction
+// uses only force values already available before the controller wakes.
+struct ForceSample {
+  long long tick;
+  double fz;
+};
+struct LoadRead {
+  double fz;
+  long long left, right;
+  bool prehistory = false;
+};
+LoadRead delayed(const std::vector<ForceSample> &samples, long long target,
+                 double initial) {
+  if (target < 0)
+    return {initial, target, target, true};
+  auto it = std::lower_bound(samples.begin(), samples.end(), target,
+                             [](auto &a, long long t) { return a.tick < t; });
+  if (it == samples.end())
+    throw std::runtime_error("future/unbracketed force requested");
+  if (it->tick == target)
+    return {it->fz, it->tick, it->tick, false};
+  if (it == samples.begin())
+    throw std::runtime_error("missing older force bracket");
+  auto lo = it - 1;
+  double w = double(target - lo->tick) / (it->tick - lo->tick);
+  return {lo->fz * (1 - w) + it->fz * w, lo->tick, it->tick, false};
+}
+struct AgedRun {
+  Body body;
+  double pos = 0, vel = 0, rates = 0, att = 0, g = 0, command = 0, bias = 0,
+         weight = 0, end = 0, applied = 0;
+  int pauses = 0;
+  double max_span = 0, event_mass_before = 0, event_mass_after = 0,
+         event_force_change = 0, event_g_error = 0;
+};
+void compare_body(const Body &a, const Body &b, AgedRun &r) {
+  r.pos = std::max(r.pos, norm(a.position - b.position));
+  r.vel = std::max(r.vel, norm(a.velocity - b.velocity));
+  r.rates = std::max(r.rates, norm(a.omega - b.omega));
+  r.att = std::max({r.att, std::abs(a.attitude.w - b.attitude.w),
+                    std::abs(a.attitude.x - b.attitude.x),
+                    std::abs(a.attitude.y - b.attitude.y),
+                    std::abs(a.attitude.z - b.attitude.z)});
+}
+AgedRun aged_loop(const Definition &d, int hz, int removed,
+                  const History *reference, std::ofstream &trace) {
+  Simulation plant(d, 1. / hz), controller(d, 1. / 120);
+  auto tr = plant.trim(70, 1000);
+  controller.trim(70, 1000);
+  auto p = tr.intent;
+  p.mouse = true;
+  p.aim_world = {1, .3, 0};
+  double initial = plant.aero.force.z;
+  std::vector<ForceSample> samples;
+  Axis3 request{};
+  AgedRun r;
+  for (int i = 0; i < 5 * hz; ++i) {
+    if (removed && i == hz) {
+      r.event_mass_before = plant.mass.mass;
+      double fz = plant.aero.force.z;
+      plant.remove_material("left_outer_forward", .2);
+      r.event_mass_after = plant.mass.mass;
+      r.event_force_change = std::abs(plant.aero.force.z - fz);
+      r.event_g_error =
+          std::abs(plant.load_factor + fz / (plant.mass.mass * gravity));
+    }
+    if (i % (hz / 120) == 0) {
+      long long target = 2LL * i - hz / 120;
+      auto read = delayed(samples, target, initial);
+      if (read.right >= 2LL * i)
+        throw std::runtime_error("noncausal read");
+      double normal = -read.fz / (plant.mass.mass * gravity);
+      r.max_span = std::max(r.max_span, (read.right - read.left) / (2. * hz));
+      controller.body = plant.body;
+      controller.load_factor = normal;
+      controller.density = 1.225 * std::exp(plant.body.position.z / 8500.);
+      p.active[Roll] = i >= hz && i < 2 * hz;
+      p.direct[Roll] = 1;
+      controller.update_controls(p);
+      for (int a = 0; a < 3; ++a)
+        request[a] = controller.ownership[a].command;
+      if (reference) {
+        const auto &s = reference->samples[i];
+        compare_body(plant.body, s.body, r);
+        r.g = std::max(r.g, std::abs(normal - s.load));
+        r.command = std::max(r.command, maxdiff(request, s.command));
+        for (int a = 0; a < 3; ++a) {
+          r.bias = std::max(
+              r.bias, std::abs(controller.instructor.rate_bias[a] - s.bias[a]));
+          r.weight = std::max(
+              r.weight,
+              std::abs(controller.ownership[a].direct_weight - s.weight[a]));
+          r.pauses += controller.instructor.integral_paused[a] != s.paused[a];
+        }
+      }
+      trace << removed << ',' << hz << ',' << i / double(hz) << ','
+            << target / (2. * hz) << ',' << read.left / (2. * hz) << ','
+            << read.right / (2. * hz) << ',' << read.fz << ','
+            << plant.mass.mass << ',' << normal << ',' << plant.load_factor
+            << ',' << read.prehistory << '\n';
+    }
+    auto held = tr.intent;
+    held.active = {true, true, true};
+    held.direct = request;
+    plant.step(held);
+    samples.push_back({2LL * i + 1, plant.aero.force.z});
+    for (const auto &node : plant.def.nodes)
+      if (!node.attached)
+        throw std::runtime_error("aged-loop fixture changed control topology");
+    if (reference) {
+      const auto &s = reference->samples[i];
+      for (size_t j = 0; j < plant.def.chains.size(); ++j) {
+        r.end = std::max(
+            r.end, std::abs(plant.def.chains[j].deflection - s.surfaces[j]));
+        r.applied =
+            std::max(r.applied, std::abs(applied_sample(plant.def.chains[j]) -
+                                         s.applied[j]));
+      }
+    }
+  }
+  r.body = plant.body;
+  if (reference) {
+    compare_body(r.body, reference->final, r);
+    if (std::max({r.pos, r.vel, r.rates, r.att, r.g, r.command, r.bias,
+                  r.weight, r.end, r.applied}) > 1e-10 ||
+        r.pauses)
+      throw std::runtime_error("fixed-age loop lost native 120 Hz identity");
+  }
+  return r;
+}
+void verify_delayed_samples() {
+  const std::vector<ForceSample> samples{{1, -10}, {3, -30}, {5, -50}};
+  for (auto pair : {std::pair<long long, double>{1, -10},
+                    {2, -20},
+                    {3, -30},
+                    {4, -40},
+                    {5, -50}}) {
+    if (delayed(samples, pair.first, 7).fz != pair.second)
+      throw std::runtime_error("exact/ramp force reconstruction failed");
+  }
+  if (!delayed({}, -1, 7).prehistory || delayed({}, -1, 7).fz != 7)
+    throw std::runtime_error("steady-trim initial cache extension failed");
+  for (long long target : {0LL, 6LL}) {
+    bool rejected = false;
+    try {
+      delayed(samples, target, 7);
+    } catch (const std::runtime_error &) {
+      rejected = true;
+    }
+    if (!rejected)
+      throw std::runtime_error("missing force bracket must not extrapolate");
+  }
+}
+void load_age_experiment(const Definition &d, const std::string &prefix) {
+  verify_delayed_samples();
+  std::ofstream trace(prefix + "-trace.csv");
+  if (!trace)
+    throw std::runtime_error("cannot write load sample trace");
+  trace << std::setprecision(17)
+        << "case,hz,control_time,force_time,left_time,right_time,raw_fz,mass,"
+           "normal_g,plant_cache_g,prehistory\n";
+  auto clean = record(d, 120, 0), damaged = record(d, 120, 1);
+  for (int hz : {120, 240, 480, 960})
+    for (int removed : {0, 1}) {
+      const History *native =
+          hz == 120 ? (removed ? &damaged : &clean) : nullptr;
+      auto r = aged_loop(d, hz, removed, native, trace);
+      std::cout << "aged " << removed << ' ' << hz << " x " << r.body.position.x
+                << " y " << r.body.position.y << " z " << r.body.position.z
+                << " force_age_s " << 1. / 240 << " reconstruction_span_s "
+                << r.max_span << " identity_checked " << (native ? 1 : 0);
+      if (native)
+        std::cout << " position_error " << r.pos << " velocity_error " << r.vel
+                  << " rates_error " << r.rates << " attitude_component_error "
+                  << r.att << " load_g_error " << r.g << " request_error "
+                  << r.command << " bias_error " << r.bias
+                  << " ownership_error " << r.weight
+                  << " surface_endpoint_error " << r.end
+                  << " surface_force_error " << r.applied
+                  << " pause_mismatches " << r.pauses;
+      if (removed)
+        std::cout << " event_mass_before " << r.event_mass_before
+                  << " event_mass_after " << r.event_mass_after
+                  << " event_cached_force_change " << r.event_force_change
+                  << " event_cached_g_error " << r.event_g_error;
+      std::cout << '\n';
+    }
+}
 void write_body(std::ostream &o, const Body &b) {
   for (Vec v : {b.position, b.velocity, b.omega})
     o << v.x << ' ' << v.y << ' ' << v.z << ' ';
@@ -413,7 +603,7 @@ int main(int argc, char **argv) {
   try {
     if (argc != 4)
       throw std::runtime_error(
-          "airframe history-prefix record|replay required");
+          "airframe output-prefix record|replay|age required");
     auto d = Definition::load(argv[1]);
     std::string prefix = argv[2], mode = argv[3];
     auto name = [&](int hz, int c) {
@@ -421,6 +611,11 @@ int main(int argc, char **argv) {
              ".txt";
     };
     std::cout << std::setprecision(15);
+    if (mode == "age") {
+      std::cout << std::setprecision(17);
+      load_age_experiment(d, prefix);
+      return 0;
+    }
     if (mode == "record") {
       for (int hz : {120, 960})
         for (int c : {0, 1}) {

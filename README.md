@@ -19,6 +19,7 @@ python3 tools/detachment_experiments.py  # owned-cell piece flight and control p
 python3 tools/material_experiments.py    # explicit local inventory and conservative mass transfer
 python3 tools/control_experiments.py     # PI headroom, request/event ablations and sensitivity through 960 Hz
 python3 tools/sensor_history_experiments.py  # fixed histories, stage clocks and surface midpoint sampling
+python3 tools/load_sample_experiments.py  # original force-sample age/current-mass normalization at fixed 120 Hz control
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
