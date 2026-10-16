@@ -1,6 +1,6 @@
 # Current decisions and evidence status
 
-Updated: 2026-10-15. Core, Instructor and signed-propulsion iterations exist on a feature branch; this is not full v0.1 acceptance.
+Updated: 2026-10-16. Core, Instructor and signed-propulsion iterations are on main; this is not full v0.1 acceptance.
 
 ## Authority and provenance
 
@@ -346,6 +346,33 @@ The direct original-pair cross-check is decisive about the comparison's meaning.
 **User review when awake:** decide what the 10% expectation is intended to constrain. One option is numerical convergence of the actual 120 Hz digital Instructor, with its update/read/output/force-age contract held fixed; another is an additional requirement for the entire controller/sensor/output system to be insensitive to rate changes or approximate a declared continuous law. The latter needs explicit PI state/output and measurement timing semantics before any algorithm change. The original §5 fixes simulation at 120 Hz; §46 gives Instructor 120 Hz as a future frequency example subject to measurement, but does not settle this benchmark interpretation. Recommendation: make the existing production timing explicit and retain the native all-rates result as separate rate-sensitivity evidence; **any acceptance reclassification requires user review and is not made here**.
 
 `python3 tools/clock_experiments.py` runs the completed six-arm diagnostic and native baselines, producing `clock-summary.json`, raw cases, applied-request/timestamp/state traces and the fixed-age reference trace under ignored `results/`. CI retains them as `clock-evidence`. This one synthetic maneuver does not establish historical or universal closed-loop fidelity. No native GUI/human handling was validated.
+
+## Aerodynamic validity: first finite-span counterexample
+
+The user clarified that aerodynamic fidelity itself is a continuing development priority. PR #8 merged as `95ee703`; its original all-rate 10% hypothesis remains false and its unresolved interpretation is unchanged. The next investigation concerns physical-model validity, independently of midpoint work conservation, cell subdivision consistency and clock convergence.
+
+`python3 tools/finite_span_experiments.py` compiles a small static probe of the **actual** C++ cell evaluator. Isolate the 128 wing cells from the loaded material fixture, disable propulsion/body/tail loads and control/incidence/elastic offsets, hold 70 m/s at 1,000 m with zero rates, and sweep 0°, 5°, 10°. Change span and inverse chord together at fixed area; also compare coincident half-area subdivision and two equal-area damage footprints. No time stepping, trim or Instructor is involved. The text fixture's rounded cell areas sum to 15.000064 m²; comparisons preserve that loaded area rather than rewriting it to 15.
+
+| 10° test | Measured result |
+|---|---|
+| AR ≈ 3.333 / 6.667 / 13.333, equal area | All yield CL ≈ 0.927440, CD ≈ 0.073658; lift ≈ 37,118.26 N, drag ≈ 2,947.96 N |
+| Symmetric outer-quarter removal versus 25% fractional loss over all cells | Both retain ≈ 11.250048 m² and yield lift ≈ 27,838.70 N, drag ≈ 2,210.97 N; differences < 1.2e−10 N |
+| Surviving inner cells after tip loss | Normalized local load unchanged from intact wing |
+| 120 versus 240 Hz static calls; 128 versus 256 coincident cells | Identical cadence result; subdivision CL/CD differences < 1e−12 |
+
+The 5° sweep also lacks geometry/damage-location response. These are **failed physical-capability hypotheses**, reported as false in JSON; CI only checks executable measurement/isolation consistency, and a green job does not make these hypotheses pass. Damage is an aerodynamic area event with zero added roughness, not material removal or structural separation. Distributed fractional loss is a numerical footprint comparator, not a resolved perforation-flow model. The static isolation deliberately excludes real elastic, rate and control feedback; it does not imply all damaged flights produce the same moments or trajectories.
+
+For an attached planar lifting wing, the established ideal elliptic-loading reference is `CDi_min = CL²/(π AR)`, with induced flow also changing effective incidence. See NASA Glenn's [induced drag](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/induced-drag-coefficient/) and [downwash](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/downwash-effects-on-lift/) explanations. This is a low-subsonic inviscid benchmark, not a calibrated rectangle, damage or stall model. At 10° and AR≈3.333 the reference gives CDi≈0.082138, already above the measured **total** CD≈0.073658. If all measured CD−CD0 were interpreted as induced drag, its implied e would be ≈1.425 / 0.712 / 0.356 across the three geometries. The conditional interpretation is explicit: the fixture has no documented profile/induced decomposition, and the fixed `.07*cl²` term cannot represent geometry-dependent induced loss across those geometries. Existing Mach lift scaling is included in measured CL; no claim of calibrated compressibility follows.
+
+**Finding:** finite-span aerodynamic coupling is absent, not merely untested. The production shared `cell_load` used by parent and detached components sums independent polars; changing cell span does not change its force law. Numerical energy/covariance checks can pass while this physical capability is missing. Static post-stall curves, geometric area loss and real control-chain damage still exist; neither this probe nor previous low-speed recovery validates spin behavior or historical handling.
+
+**Priorities and next bounded experiment:**
+
+1. Finite-wing induced flow and damaged load redistribution first, because the same demonstrated gap affects clean performance and damaged controllability. Before changing production, explicitly separate two-dimensional section/profile tables from whole-wing empirical increments. Recommended next experiment: a diagnostic attached-flow lifting-line solution on the same span stations with declared section slope/profile drag, starting with an elliptic analytic reference, rectangle refinement, and partial tip loss. Check downwash/load redistribution, induced power and cell-resolution behavior; then test real control-chain and structural feedback in a bounded flight. This is a candidate model, not adopted production behavior.
+2. Local stall/post-stall validity next: independently sourced section data, AoA/rate/sideslip sweeps and asymmetric recovery, keeping static versus dynamic-stall claims separate. Classical attached-flow lifting line is not a solution for deep stall/spins; no universal stall extension has been chosen.
+3. Propeller-airframe effects and calibration follow: preserve the existing signed blade loads and coupled rotor accounting, then test measured blade/engine data and wake effects. Conservation alone does not validate propwash or historical performance.
+
+Adding an induced-drag term to today's mixed CD tables would risk double counting; replacing them silently would change trim, performance and damage interpretation. **No polar semantics, production force code, gains or acceptance thresholds change in this diagnostic.** The proposed section-table/finite-span contract must be surfaced before adopting it; the present work does not settle it. CSV/JSON are retained by CI as `finite-span-evidence`. No native GUI test or new historical-aircraft claim is made.
 
 ## How decisions change
 

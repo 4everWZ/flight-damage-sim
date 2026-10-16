@@ -21,6 +21,7 @@ python3 tools/control_experiments.py     # PI headroom, request/event ablations 
 python3 tools/sensor_history_experiments.py  # fixed histories, stage clocks and surface midpoint sampling
 python3 tools/load_sample_experiments.py  # original force-sample age/current-mass normalization at fixed 120 Hz control
 python3 tools/clock_experiments.py  # final internal/sensor/output clock decomposition on fixed 960 Hz physics
+python3 tools/finite_span_experiments.py  # physical-capability counterexample; failed finite-span hypotheses remain false
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.

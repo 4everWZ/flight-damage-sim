@@ -27,6 +27,7 @@ jobs:
           python3 tools/sensor_history_experiments.py
           python3 tools/load_sample_experiments.py
           python3 tools/clock_experiments.py
+          python3 tools/finite_span_experiments.py
       - name: Exercise live input and render transport
         run: |
           python3 -m pip install -r requirements-viewer.txt
@@ -84,4 +85,12 @@ jobs:
             results/clock-cases.txt
             results/clock-trace.csv
             results/clock-age-reference.csv
+          if-no-files-found: error
+      - name: Preserve finite-span capability evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: finite-span-evidence
+          path: |
+            results/finite-span.csv
+            results/finite-span-summary.json
           if-no-files-found: error

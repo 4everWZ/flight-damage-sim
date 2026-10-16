@@ -6,11 +6,15 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15. PR #2–#7 have merged with observed successful post-merge main workflows. This final clock investigation starts from main `5f42d92` on `feature/clock-decomposition`. Numerical lift-work and surface-sampling repairs remain valid local improvements. Preserve user changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Review physical claims independently of CI, merge eligible bounded diagnostic work only after checks, and verify resulting main CI.
+The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15, and specifically approved PR #8 ready/merge on 2026-10-16. PR #2–#8 have merged; #8 is main `95ee703` with its post-merge workflow still being observed at this edit. The finite-span investigation starts there on `feature/aero-finite-span`. Numerical lift-work and surface-sampling repairs remain valid local improvements. Preserve user changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Review physical claims independently of CI, merge eligible bounded diagnostic work only after checks, and verify resulting main CI.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
 ## Current bounded iteration
+
+Aerodynamic physical validity is the user's next priority. The first finite-span experiment is implemented and locally measured: fixed-area AR changes do not change CL/CD; equal-area tip/distributed loss gives identical total loads and surviving inner cells have no induced-flow redistribution. Static cadence and coincident subdivision checks pass, while the capability hypotheses remain false. No production model or acceptance semantics change. See [the evidence and prioritized plan](../decisions/current-decisions.md#aerodynamic-validity-first-finite-span-counterexample). Commit/push this bounded diagnostic and observe CI; before adopting a new force law, surface the mixed whole-wing/section polar split and attached-flow validity boundary. The next useful experiment is a diagnostic lifting-line comparison against an elliptic reference and damaged rectangle, not another clock patch.
+
+### Previous clock investigation, completed
 
 The final discriminating experiment is complete: keep the physical kernel/actuators/rotor/structure at 960 Hz; independently change internal controller update, sensor read and request output clocks, then close at the native force age. The coarse endpoint matches the previous fixed-age run and the high endpoint reproduces the default native 960 Hz chain exactly. A separate 240 Hz sampled-system cross-check reproduces ~0.12181 m of effect disagreement on identical physical stepping, versus ~0.12418 m in the original native comparison.
 
@@ -30,6 +34,7 @@ python3 tools/control_experiments.py
 python3 tools/sensor_history_experiments.py
 python3 tools/load_sample_experiments.py
 python3 tools/clock_experiments.py
+python3 tools/finite_span_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
@@ -65,7 +70,7 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Next useful experiments
 
-1. Clock experiments are finished. Review the specific sampled-production versus whole-loop rate-insensitivity/continuous-limit target described in current decisions when the user is awake. Preserve the original failed 10% hypothesis until that interpretation is explicitly reviewed; do not select another controller patch without an agreed target and demonstrated mechanism.
+1. Prioritize the finite-span/induced-flow physical-model gap now measured above, then local stall validation, then calibrated propeller effects. Surface section-versus-whole-wing table semantics before adoption; use a diagnostic lifting-line reference first. Clock experiments are finished: preserve the original failed 10% hypothesis and unresolved sampled-production versus continuous-limit interpretation; no new clock patch is selected.
 2. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
 3. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.
 4. Extend material mass bookkeeping and spanwise graph geometry/load mapping, then test large skin loss, critical spar hits and secondary detached-piece fracture. Explicit named material removal now updates the current component and accounts for removed parcels; automatic geometric damage-to-material mapping and full structural materialization remain pending. Current generalized graph statics are not calibrated local beam stresses.
