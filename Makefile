@@ -57,6 +57,12 @@ build/sensor-history-probe: $(CORE) tests/sensor_history_probe.cpp include/fligh
 build/finite-span-probe: $(CORE) tests/finite_span_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/finite_span_probe.cpp -o $@
 
+build/section-controls-probe: $(CORE) tests/section_controls_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/section_controls_probe.cpp -o $@
+
+build/control-transition-probe: $(CORE) tests/control_transition_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/control_transition_probe.cpp -o $@
+
 test: all
 	./build/surface-sampling-tests data/validation-material.airframe
 	./build/aerodynamics-tests data/validation-material.airframe

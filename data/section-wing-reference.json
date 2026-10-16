@@ -1,0 +1,30 @@
+{
+  "scope": "Independent synthetic low-angle diagnostic only; not a production airframe or a migration of old polars.",
+  "axes": "Flow frame: x along aircraft air-relative velocity (drag -x), y right, z down; datum fixed at center leading edge, trailing edge at negative x.",
+  "geometry": {
+    "span_m": 10.0,
+    "chord_m": 1.5,
+    "span_strips": 32,
+    "chord_cells": 4,
+    "leading_edge_x_m": 0.0,
+    "aerodynamic_center_chord_fraction": 0.25
+  },
+  "section_2d": {
+    "provenance": "Explicit synthetic linear section, not measured and not inferred from existing tables.",
+    "cl_alpha_per_rad": 6.283185307179586,
+    "zero_lift_alpha_deg": 0.0,
+    "profile_cd0": 0.012,
+    "profile_cd_cl_squared": 0.01,
+    "section_cm_about_aerodynamic_center": 0.0,
+    "valid_alpha_deg": [-5.0, 5.0]
+  },
+  "load_transfer": "Area-weighted equivalent cell wrenches, including explicit couples to preserve the strip resultant at its declared aerodynamic center. Not a chordwise pressure or local structural-stress prediction.",
+  "experimental_roll_control": {
+    "meaning": "Independent synthetic incidence mapping from actual settled actuator angles; not calibrated or inferred from legacy aerodynamic control_gain.",
+    "incidence_per_surface_rad": 0.5,
+    "left_center_y_m": -3.0,
+    "right_center_y_m": 3.0,
+    "gaussian_width_m": 0.9,
+    "tested_normalized_inputs": [-0.2, 0.0, 0.2]
+  }
+}

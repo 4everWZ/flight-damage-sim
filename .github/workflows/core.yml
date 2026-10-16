@@ -6,6 +6,43 @@ on:
 permissions:
   contents: read
 jobs:
+  lifting-line-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independent low-angle lifting-line reference
+        run: python3 tools/lifting_line_reference.py
+      - name: Explicit sectional fixture and conservative cell transfer
+        run: python3 tools/section_transfer_reference.py
+      - name: Local sectional loss and self-consistent wake coupling
+        run: python3 tools/local_section_coupling.py
+      - name: Static roll authority through actual control chains
+        run: python3 tools/roll_authority_reference.py
+      - name: Actual disconnect and captured-angle jam comparison
+        run: python3 tools/control_fault_reference.py
+      - name: Fault transition continuity and actuator-time refinement
+        run: python3 tools/control_transition_reference.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lifting-line-reference-evidence
+          path: |
+            results/lifting-line-summary.json
+            results/lifting-line-loads.csv
+            results/section-transfer-summary.json
+            results/section-transfer-strips.csv
+            results/local-section-summary.json
+            results/local-section-loads.csv
+            results/roll-authority-summary.json
+            results/roll-authority.csv
+            results/control-fault-summary.json
+            results/control-fault-curves.csv
+            results/control-transition-summary.json
+            results/control-transition-hardware.csv
+            results/control-transition-forces.csv
+          if-no-files-found: error
   physics-and-controls:
     runs-on: ubuntu-latest
     timeout-minutes: 10

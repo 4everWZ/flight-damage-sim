@@ -372,7 +372,185 @@ For an attached planar lifting wing, the established ideal elliptic-loading refe
 2. Local stall/post-stall validity next: independently sourced section data, AoA/rate/sideslip sweeps and asymmetric recovery, keeping static versus dynamic-stall claims separate. Classical attached-flow lifting line is not a solution for deep stall/spins; no universal stall extension has been chosen.
 3. Propeller-airframe effects and calibration follow: preserve the existing signed blade loads and coupled rotor accounting, then test measured blade/engine data and wake effects. Conservation alone does not validate propwash or historical performance.
 
-Adding an induced-drag term to today's mixed CD tables would risk double counting; replacing them silently would change trim, performance and damage interpretation. **No polar semantics, production force code, gains or acceptance thresholds change in this diagnostic.** The proposed section-table/finite-span contract must be surfaced before adopting it; the present work does not settle it. CSV/JSON are retained by CI as `finite-span-evidence`. No native GUI test or new historical-aircraft claim is made.
+Adding an induced-drag term to today's unsplit CD tables would risk double counting; replacing them silently would change trim, performance and damage interpretation. **No polar semantics, production force code, gains or acceptance thresholds change in this diagnostic.** The proposed section-table/finite-span contract must be surfaced before adopting it; the present work does not settle it. CSV/JSON are retained by CI as `finite-span-evidence`. No native GUI test or new historical-aircraft claim is made.
+
+## Independent attached-flow lifting-line reference
+
+### What the existing tables actually represent
+
+Inspection of `tools/make_fixture.py`, its first implementation in `601851d`, the three loaded airframes and the production lookup establishes **synthetic operational cell polars**, not measured section data or calibrated whole-wing data. All three wing tables are identical. At the generated knots up to ±15°, `cl=5.2*alpha`, `cd=.016+.07*cl²`, `cm=0`; post-stall values and drag rise are prescribed synthetic functions. There is no airfoil identity, Reynolds number, experimental provenance, stated reference aspect ratio, or profile/induced split. Plausible-looking slopes and quadratic drag do not establish those meanings. In particular, `.07*cl²` is neither proven pure induced drag nor proven pure viscous profile drag. "Unsplit" describes that absence of a contract, not a discovered physical decomposition.
+
+The loader also matters: production linearly interpolates **each coefficient in alpha**, then applies its separate bounded Mach multiplier to lift. At 2° the loaded/interpolated wing CD is **0.0217658**, versus **0.0183063** from evaluating the continuous generator formula between knots. The reference records both, and uses the loaded interpolation for its explicitly hypothetical profile interpretation. This difference is reported without changing the existing fixture or its lookup. The separate synthetic propeller polar is not used by this experiment.
+
+### Reference model and falsification
+
+`python3 tools/lifting_line_reference.py` is a standalone standard-library diagnostic; production never imports or calls it. Its declared model is steady, incompressible, small-angle, attached flow on straight planar connected wings, with an **explicit ideal section slope a0=2π/rad**, zero section zero-lift angle and no inferred profile drag. Speed is 70 m/s, density is the existing 1,000 m exponential value, and the free-stream angle is 2°. These are independently declared inputs, not a relabeling of the current polar.
+
+The physical basis is MIT Unified Fluids [lecture 6](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f06.pdf) (distributed wake induction), [lecture 7](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f07.pdf) (elliptic load and separate profile/induced contributions), [lecture 8](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f08.pdf) (section closure) and [lecture 9](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f09.pdf) (general Fourier loading). The implementation uses `y=yc+b*cos(theta)/2`, `Gamma=2*b*V*Σ An*sin(n*theta)`, induced angle `Σ n*An*sin(n*theta)/sin(theta)`, and the section relation `2*Gamma/(V*c)=a0*(alpha−alpha_i)`. A small dense collocation solve supplies the coefficients. Lift/induced drag are `CL=π*AR*A1`, `CDi=π*AR*Σ n*An²`; no empirical induced term is added.
+
+Checks and their limits:
+
+- Untwisted elliptic planforms at AR=6/10/12 and 16/32/64 modes reproduce analytic CL, uniform downwash and elliptic induced drag; maximum absolute CL error is **2.8e−17**.
+- A manufactured, smoothly twisted constant-chord wing has known first and second Fourier coefficients. Recovering both checks a non-elliptic loading mode and the roll normalization; it is an analytic code check, not a wind-tunnel validation.
+- For actual untwisted rectangles and tip cuts, 64→96 modes changes CL by <1.6e−7 relative and CDi by <9e−7 relative. Independent span integrals close lift and induced drag to <3.3e−16 relative, and roll to <1e−12 N m. Induced power is positive and span efficiency ≤1.
+- Integrated refinement is **not uniform local accuracy**: the intact rectangle's maximum off-collocation section-cl residual decreases from 0.0262 at 16 modes to 0.000811 at 96, concentrated near the sharp tip. At the centerline, 64→96 changes lift/span by <0.00006 N/m. No high-resolution tip-flow or viscous result is claimed.
+
+### Low-angle geometry and damage findings
+
+Rectangles use the fixture's geometric 10 m span and 1.5 m chord (15 m²); these geometric reference areas are distinct from its rounded sum of cell areas, 15.000064 m². Symmetric tip cutting removes the outer 1.25 m on each side. The equal-area comparator reduces chord to 1.125 m while retaining full span: it is a **span-preserving chord-reduction surrogate**, not a prediction for perforations or the earlier fractional-cell damage command.
+
+| Independent geometry | Lift at the same 2° (N) | Centerline load (N/m) | Centerline downwash (m/s) | Alpha for intact lift | Induced drag at that matched lift (N) |
+|---|---:|---:|---:|---:|---:|
+| Intact, b=10 m | 6493.26 | 738.47 | 0.38779 | 2.000° | 53.06 |
+| Symmetric tip cut, b=7.5 m | 4520.24 | 696.71 | 0.50406 | 2.873° | 92.85 |
+| Equal-area chord reduction, b=10 m | 5175.59 | 579.05 | 0.29428 | 2.509° | 54.12 |
+
+Thus induced coupling changes surviving local load and distinguishes equal-area geometries. At fixed angle the tip-cut induced drag actually falls from 53.06 to **45.00 N**, because lift falls; its drag penalty appears in the properly **matched-lift** comparison. Do not conflate these interventions. A one-sided left/right tip cut gives opposite FRD roll moments **∓3436.54 N m**, with equal lift ≈5498.47 N. This is static aerodynamic load asymmetry, not a demonstration that the real damaged pilot/control chain can trim it. Existing 6DoF, real controls and structural feedback were not exercised or weakened by this independent model.
+
+### Supported next boundary and unresolved material choice
+
+The experiment supports an **independent attached-flow strip-coupling reference** for contiguous wings and simple geometric tip loss. It does not support dropping this solver into the live core unchanged: no arbitrary missing patches, disconnected lifting surfaces, sweep, fuselage/tail interference, propwash, elastic iteration, transient wake, stall/spin, 120 Hz cost or damaged-control flight has been validated. In particular, a span-scale drag multiplier alone would miss the measured local load redistribution.
+
+That next boundary now has an isolated experiment: `data/section-wing-reference.json` explicitly declares a new synthetic 2-D slope `2π/rad`, zero-lift angle 0°, profile `cd=.012+.01*cl²`, section cm=0 and quarter-chord aerodynamic center. None is inferred from old tables or claimed measured. Its consumers are the independent Python reference experiments. The transfer experiment integrates lifting-line circulation once per span strip, adds the declared profile drag once, and transfers equivalent wrenches to four (then eight) chordwise cells. Production does not load the JSON or call these scripts. This is a diagnostic boundary, **not** a live C++ flight adapter, structural feedback or an adopted production data contract.
+
+The data choice remains material. For illustration only, treating old 5.2/rad as a **section** slope gives whole-wing CL≈**0.139954** at 2°, versus the old uniform incompressible value ≈**0.181514**. With that same hypothetical interpretation, using only .016 as profile plus computed induced drag gives total CD≈**0.016999**; using the **entire interpolated old CD** as profile plus induced gives ≈**0.021445**. The first discards an unexplained term; the second may double count it. Neither is licensed by provenance. Treating the old slope as a calibrated whole-wing result would instead require a separately specified inverse section calibration, for which no measurements exist. **Approval is required before adopting a production table meaning, migrating existing data, selecting a new default force law or changing acceptance interpretation.** No such choice is adopted here; ordinary independent reference experiments can continue without it.
+
+### Localized section loss: wake feedback versus local force scaling
+
+`python3 tools/local_section_coupling.py` asks one question: **does local scaling of an intact load remain a self-consistent solution after the local section law changes?** It reads only the explicit sectional fixture, holds its geometry/profile law/zero-lift angle and 2° incidence fixed, and reduces local section slope by the declared smooth factor `f(y)=1−0.5*exp(−((y+3)/0.6)²)`. This is a synthetic localized constitutive intervention centered at y=−3 m, **not** a perforation, lost area, structural damage, historical measurement or interpretation of legacy `lift_efficiency`. The Gaussian's far-wing tail is negligible, not a geometrically sharp damage boundary.
+
+Three arms distinguish the mechanism. Intact solves the original section law. The frozen-load ablation sets `Gamma_f=f*Gamma_intact`, projects that circulation into Fourier modes, and reconstructs **its own** induced flow to test the new section closure; it does not let that flow feed back into the selected circulation. Recoupled solves circulation and induced flow together with `a0(y)=f(y)*a0`. Only the independent reference solver gains a scalar-or-station-function slope input. Scalar/callable equality and the existing analytic reference checks pass; production code and data are unchanged.
+
+| 128-mode result at the same 2° | Total lift (N) | FRD roll (N m) | Induced drag (N) | Maximum section-cl closure residual in \|y\|≤4.5 m |
+|---|---:|---:|---:|---:|
+| Intact | 6493.255 | ≈0 | 53.058 | 1.17e−7 |
+| Frozen local scaling, intentionally inconsistent ablation | 6134.994 | −1069.020 | 52.670 | 0.09465 |
+| Recoupled sectional law/wake | 6147.548 | −867.198 | 48.587 | 1.05e−7 |
+
+The ablation is **not a valid alternate flight model**. Its integral lift, roll and positive induced-power identities still pass (relative force/power errors ≤2.3e−16), demonstrating that conservation identities alone do not enforce the local constitutive relation. Its roughly 0.095 interior closure defect is falsifying evidence against local force scaling as a substitute for solving this declared coupled model.
+
+Physical findings within the reference:
+
+- The frozen and recoupled total lifts differ by only **12.55 N**, while their roll moments differ by **201.82 N m** (~19% of the frozen magnitude). Small total-lift disagreement does not imply similar asymmetric load/moment response.
+- At y=−3 m, halving section slope gives recoupled lift/span **496.39 N/m**, versus intact **678.23** and frozen **339.11**; local induced flow becomes upwash ≈−0.320 m/s. That feedback partially restores the local load relative to simple scaling.
+- At effectively untouched y=+1 m, recoupled load falls from **733.46 to 725.96 N/m** as induced downwash increases. Frozen scaling leaves it unchanged to <0.001 N/m. Redistribution need not mean every intact region gains load.
+- Mirroring the intervention preserves lift and reverses roll within 1e−8 N/N m. Relative 96→128-mode changes are ≈2.1e−8 for lift, 2.0e−8 for roll and 1.0e−7 for induced drag. Interior closure residual falls from 0.00205 at 32 modes to 1.05e−7 at 128.
+- The fixed off-grid probe still sees a **~0.00194** maximum closure residual very near the sharp tips. Integrated/interior convergence does not establish uniformly resolved tip flow. All probed effective angles remain inside the fixture's ±5° domain; no stall extension is made.
+
+At fixed incidence the recoupled induced drag is lower because lift falls. Rescaling the linear reference to the intact **total lift** needs ≈2.11247° and induced drag ≈**54.205 N**, versus intact ≈53.058 N. This is an aerodynamic same-lift comparison, not trimmed flight or demonstrated remaining control authority. Power checks are steady `V*Di`/span-integral identities, not a time-integrated 6DoF energy ledger.
+
+**Supported next step:** require both section/wake closure and conservative cell-wrench transfer before using an experimental coupled solution for feedback. The next informative bounded experiment is static remaining roll authority with a declared local control-incidence perturbation (ideally sourced from the actual damaged chain), while retaining this closure check; first establish that boundary independently of the live default. These results do not authorize mapping legacy damage coefficients to section slopes, deriving chordwise pressure, or changing production data/default semantics. That choice remains for user review with the impact examples above. CSV/JSON are retained in the existing `lifting-line-reference-evidence` artifact; no additional PR or solver framework is introduced.
+
+### Static roll authority through actual actuator outputs
+
+`python3 tools/roll_authority_reference.py` now compares the intact and locally reduced-section-slope models at **identical actual control outputs**. The same Gaussian section intervention from the preceding experiment is retained; mechanical chains are intact and identical in both arms. `build/section-controls-probe` calls the authoritative C++ `Simulation::update_controls` at 120 Hz on a held-body hardware bench, with direct roll owning its axis, no pitch/yaw ownership and Instructor off. It checks that actual aileron deflections are settled between 1 and 2 seconds. No body/aero/structure step is taken. Existing `.airframe` tables are loaded/validated but not used to compute aerodynamic forces; only their real control-chain configuration is used mechanically.
+
+At 70 m/s and the reference density, q≈2668.14 Pa. Inputs −0.2/0/+0.2 produce actual left/right actuator positions −3.831985°/0/+3.831985°. The explicit sectional JSON declares a **new synthetic** control mapping: incidence gain 0.5 rad/rad, smooth Gaussian windows at y=±3 m with width 0.9 m, opposite aerodynamic signs on left/right. It is not inferred from legacy `control_gain` or calibrated as a historical aileron. Both aerodynamic arms consume the same sampled positions; no surface state is manufactured by the Python solver.
+
+Separate the neutral bias from the increment caused by input. Moments below are FRD roll about the experimental wing's center datum, at fixed 2° base incidence:
+
+| Same normalized direct input | Intact roll (N m) | Local slope loss, recoupled roll (N m) |
+|---|---:|---:|
+| −0.2 | −5077.30 | −5484.02 |
+| 0 | ≈0 | −867.20 |
+| +0.2 | +5077.30 | +3749.62 |
+
+The finite-interval incremental gains are ≈**25,386.49** versus **23,084.10 N m/input**, so this damaged section model retains **90.93%** of the intact gain over the tested interval. Its positive-input increment from neutral is ≈4616.82 N m, plus a persistent −867.20 N m bias. The positive **total** moment ratio (~73.9%) is therefore not the incremental control-gain ratio. Likewise, the larger negative total magnitude does not imply stronger negative control effectiveness; the damage bias assists that direction.
+
+A predicted bias-canceling input **+0.0375669** lies inside the measured interval. Resampling the real C++ chains at that input and solving again gives roll ≈2.9e−13 N m. Lift is still only ≈**6113.27 N**, versus intact ≈6493.26 N: this is static one-moment cancellation, not six-axis trim, achieved roll rate, stability, dynamic recovery or flight safety. Neither full-stick authority nor an aircraft-wide envelope is inferred from ±0.2 input.
+
+Verification and falsifiers:
+
+- Both physical arms keep section/wake closure (interior residual ≤1.32e−7) and stay within the unchanged ±5° effective section-angle domain (maximum ≈3.59°). Relative 96→128-mode roll changes at +0.2 are <1.5e−8. Sharp-tip local-resolution limitations remain as above.
+- Strip quadrature agrees with spectral lift/roll/induced drag within the 1e−7 absolute check; four/eight chord-cell equivalent wrenches preserve force, moment about an offset CG and rigid-field power within 1e−8 (observed errors ≤4.1e−11). These are steady transfer identities, not a dynamic energy ledger or pressure/stress validation.
+- With actual zero input, the prior frozen-versus-recoupled comparison reproduces **12.5537 N** lift difference and **201.8224 N m** roll difference. That earlier close-lift comparison was between two damaged-load treatments, not between intact and damaged aircraft. It remains a reason to measure moments and authority separately.
+- The first attempted controlled frozen ablation at +0.2 reached effective angle **5.27977°**, outside the declared section domain. This failed domain check is preserved in JSON. It is excluded from authority estimation; only its neutral-point mechanism check is retained. No input bound, section limit or original acceptance threshold is relaxed.
+
+This first comparison isolates aerodynamic section loss with identical intact hardware; the disconnect/jam follow-up below measures actual hardware faults at the same boundary. Neither establishes structural feedback, body motion or stall. Production defaults, legacy aerodynamic data and the original failed 10% hypothesis remain untouched; adoption or reinterpretation of production data is still a separate decision. Results are `roll-authority-summary.json`/`roll-authority.csv` in the existing evidence artifact and PR #10.
+
+### Disconnect versus captured-angle jam
+
+`python3 tools/control_fault_reference.py` crosses three real hardware states (normal, left link disconnected, left surface jammed) with clean versus the preceding local section-slope loss: **six static cases**, each at the same −0.2/0/+0.2 requests and declared sectional/control mapping. Only the independent probe/orchestration changes; production C++ mechanics, old aerodynamic data and failure thresholds do not.
+
+Fault semantics come directly from existing `Simulation::disconnect` and `advance_surface`:
+
+- Fault arms first hold +0.2 for one second. Both have actual pre-fault left angle **+3.831985°**. Immediately after either event the angle is unchanged; the probe never writes `deflection`.
+- Disconnect calls the existing API, clearing `connected`; the existing actuator update then targets neutral. After settling, left angle is **0°** for every tested request. This is the current model's neutral-seeking behavior, not a validated free-floating hinge model.
+- Jam sets the existing `jammed` flag and captures the actual pre-fault angle in `jam_position`; the authoritative update freezes it at **+3.831985°**, regardless of subsequent request. It does not teleport to an arbitrary specified angle.
+- The right chain receives identical requests and has the same settled positions as the normal bench. Direct roll ownership remains 1, even when the left actuator cannot follow. Samples at one and two seconds after the event verify settlement; the full event/force transient is not simulated.
+
+| Hardware | Section loss | Neutral roll bias (N m) | Incremental gain / clean intact | Static zero-roll input | Within tested interval |
+|---|---|---:|---:|---:|---|
+| Normal | No | ≈0 | 100% | ≈0 | Interior |
+| Normal | Yes | −867.20 | 90.93% | +0.03757 | Interior |
+| Left disconnected | No | ≈0 | 50.00% | ≈0 | Interior |
+| Left disconnected | Yes | −867.20 | 50.26% | +0.06796 | Interior |
+| Left jammed at captured angle | No | +2538.65 | 50.00% | −0.20000 | Negative boundary |
+| Left jammed at captured angle | Yes | +1197.58 | 50.26% | −0.09385 | Interior |
+
+**Finding:** disconnect and jam have the same incremental gain for a given section law because the same right actuator remains input-responsive, but their neutral biases and available command headroom differ. In clean aero their gains are ≈12,693.24 N m/input; with local section loss they are ≈12,760.18, versus the full clean value ≈25,386.49. The small single-right gain increase (~0.53%) is a result of this linear coupled reference, not recovery of the missing left input response or a general law for damaged aircraft. The reference's full two-actuator gain still decreases to the previously measured 90.93%.
+
+Adding the local section loss partially opposes the positive jam bias, moving the zero-roll command inward. It **does not restore control gain**. A smaller neutral moment cannot stand in for healthier controls. Conversely, the clean jam case reaches zero roll at the edge of the **tested** interval: its near-zero negative command headroom is not a claim about the mechanical stop, full-stick authority or an aircraft-wide loss-of-control threshold.
+
+All in-interval zero-roll commands are resampled through the actual faulted C++ bench and re-solved (|Mx|<1e−6 N m). Their lift differs substantially: clean jam cancellation gives ≈**8530.63 N** versus the clean intact ≈6493.26 N; section loss plus disconnect gives ≈**5803.23 N**. No result is called six-axis trim, dynamic recovery or structural survivability.
+
+The 18 sampled physical states have maximum effective section angle ≈**3.66024°**, interior section/wake residual ≤**1.36e−7**, relative 96→128-mode roll changes <**1.5e−8**, and conservative strip/cell force/moment/rigid-power errors ≤**4.1e−11**. Existing ±5°, closure, transfer and original acceptance limits remain unchanged. No event energy impulse, time-integrated body dynamics, chordwise pressure or hinge free-floating physics is claimed. The default prior experiment still reproduces retained gain 0.90930636.
+
+The held-rig transition follow-up below distinguishes transient from settled authority without a new production-model choice. Replacing neutral-seeking disconnect with aerodynamic free floating would still require an explicit hinge moment/inertia/damping model and a separately reviewed production semantic/data decision; these results do not choose it. CSV/JSON (`control-fault-summary.json`, `control-fault-curves.csv`) stay in the existing artifact and PR #10.
+
+### Fault transitions: continuity and time sampling
+
+`python3 tools/control_transition_reference.py` completes this bounded control-fault investigation. A new small C++ probe drives the **existing** control update on a held body with constant +0.2 direct-roll input for 0.25 s. At 120/240/480 Hz, compare normal hardware, disconnect and captured-angle jam at **1/60 s** (surface still moving) or **0.125 s** (surface settled). The normal trace is shared, giving 15 hardware traces. All events align with every tested grid: this tests the same physical input/event schedule, not arbitrary within-tick event quantization. Pressure is fixed and the loaded fixture has zero actuator lag/friction; no parameter is reset to make it fit the analytic comparison.
+
+Before/after event rows have the **same timestamp**. The API/configuration changes neither physical deflection nor held-body position/velocity/rates/quaternion. Actual subsequent surface increments obey the existing slew bound. Internal `filtered` driver values can reset on the next update: for late disconnect at 120 Hz, the driver changes −4.4° while the physical angle changes only −0.725755°. For early/late jam the driver resets by −2.94849°/−0.568015°, while physical angle stays fixed. A driver/cache reset is not a surface-position jump.
+
+Real endpoint and `midpoint_deflection` traces drive the **same declared steady linear sectional reference**, with clean and locally reduced section slope. The affine control response is obtained from the existing solver, checked against fresh solves at 15 distinct corner/event/first-step/end states per aero model (maximum coefficient difference <9e−19). Corner closure bounds are <1.34e−7, effective angles <3.63°, and representative wrench-transfer errors <3.3e−11. This uses linearity for efficient trace evaluation; it is no new unsteady-flight engine or pressure law.
+
+Findings:
+
+- Event-time physical angle and quasi-steady roll-torque jumps are **zero**. Endpoint angle differs from the continuous fixed-rate/target actuator solution by ≤2.8e−17 rad; common-time differences between the three grids are ≤1.8e−18 rad and ≤2.3e−13 N m in roll torque.
+- Moving jam captures ≈**1.45151°**, versus ≈**3.83198°** after settling. Right hardware keeps moving toward the held target. An early clean disconnect can initially leave total roll torque unchanged because left/right rate contributions cancel; an early jam still permits torque to rise as the right surface moves. A fault does not always cause an immediate torque drop.
+- Settled jam at the already-commanded position produces **no torque-trace change under this unchanged input**, despite the lost future input responsiveness measured in the previous static study. One present torque sample cannot establish healthy control authority.
+- Late clean disconnect's first-step roll change is about **−480.80 / −240.40 / −120.20 N m** at 120/240/480 Hz. This finite rate-driven change scales with interval duration; it is not an event-time discontinuity.
+
+Torque-time integration separates endpoint sampling from the actual control midpoint. For the late clean disconnect, compare the time integral over the same 0.25 s with the analytic piecewise-linear actuator trajectory and linear sectional response:
+
+| Hz | Endpoint-sample integral error (N m s) | Actual-midpoint integral error (N m s) |
+|---:|---:|---:|
+| 120 | +10.17383 | +0.157063 |
+| 240 | +5.16545 | +0.096962 |
+| 480 | +2.63120 | +0.001803 |
+
+All midpoint errors satisfy the declared piecewise-linear corner bound `(2*abs(K_left)*rate_left + abs(K_right)*rate_right)*h²/8`; event boundaries are common grid points. Settling-corner phase changes the observed error ratios, so the three measurements are not advertised as a universal 4× reduction per refinement. The endpoint rule shows the expected first-order bias. **No production defect is demonstrated or repaired here:** the existing production airframe and detached-force paths already consume midpoint surface samples. This control-only benchmark neither replaces the original all-rate 10% hypothesis (still false) nor proves full-system numerical/historical validity.
+
+The force trace is quasi-steady on a held rig. Its torque-time integral is not body angular momentum, a dynamic flight-recovery result or an energy ledger. No actuator inertia/velocity-energy state or jam-reaction impulse is introduced; validating those phenomena would require a different model/data contract. Arbitrary substep events, varying pressure, nonzero actuator lag/friction, unsteady wakes and body/structural feedback are outside this experiment.
+
+**Diagnostic merge assessment:** this group is a self-contained, reproducible **independent diagnostic increment**: it establishes and bounds its reference, keeps real control/fault semantics, records previous negative findings, and requires no human GUI/handling test for its stated claims. It contains no production force-law/default/data migration and is suitable for the user's authorized automatic integration after checks, **not** adoption of a new flight model or full v0.1 acceptance. PR #9's baseline has been merged as `62c2bc2`; PR #10 targets main and must preserve that evidence. Integration does not resolve the production-data/free-hinge choices. GitHub records the final merge and post-merge CI status.
+
+No further patch is selected from these traces. A later body-dynamics or nonsteady-physics study is a separate bounded claim; free-floating hinges or a production section-data/default change need the explicit choices already described. The current group's raw hardware CSV, quasi-steady force CSV and summary JSON (`control-transition-*`) are retained in the same evidence artifact.
+
+### Small decision proposal: opt-in sections, preserved legacy
+
+**Physical change proposed:** for explicitly sectional experimental data only, solve coupled spanwise circulation/downwash and add separately declared profile drag. Geometry and tip loss then change surviving loads and matched-lift induced drag. Keep span-preserving chord reduction labeled a geometric comparator; it is **not skin perforation**. Arbitrary holes and stalled/transient flow remain outside this reference.
+
+**Legacy preservation:** leave existing `.airframe` files, lookup, force/control/structure code, default viewer and acceptance scripts on their current path. The new JSON and Python diagnostics are opt-in and have no production call site. The old failed 10% hypothesis remains false. No old slope/drag term is reclassified and no semantic production change is merged.
+
+**Acceptance evidence for the experimental boundary:**
+
+| Test | Actual evidence and supported claim |
+|---|---|
+| Analytic flow/reference cases | Elliptic lift/downwash/induced drag, twisted-rectangle mode, positive induced power and refinement checks above pass |
+| Strip quadrature versus whole-wing result | Across clean/symmetric/asymmetric tip cuts and chord surrogate, lift/induced drag close within 1e−9 relative; 16→32-point quadrature force changes <1e−9 N |
+| Four versus eight chordwise cells | Equivalent summed force, moment about an offset CG, and power in a nonzero rigid velocity/rate field pass the <1e−8 absolute tolerance (local errors <2e−11 N, N m, W); no fourfold induced drag |
+| Force-only deposition counterexample | Moving area-weighted forces from quarter-chord to cell centers creates **−2434.97 N m** pitch error and **+486.99 W** power discrepancy on the intact wing |
+| Equivalent cell wrenches | Carry explicit couples as well as force, preserving the declared strip resultant and work; this fixes the transfer error without claiming a pressure distribution |
+| Legacy flight/control/structure regressions | Existing full CI is observed separately; passing reference jobs alone does not establish legacy-suite completion or live physical validity |
+
+At 2° the new intact fixture has lift ≈6493.26 N, induced drag ≈53.06 N and **declared synthetic profile drag ≈491.17 N** (total ≈544.23 N). Unlike the previous hypothetical split, that profile law is explicit new input. This is no historical performance measurement. The rigid-velocity power check tests equivalent wrench transfer, not a time-integrated energy ledger or a stability/handling test.
+
+**Decision still needed before production adoption:** approve a new explicit section-data contract and its behavior outside the attached-flow domain, while retaining legacy semantics until a separate migration/default decision. Quarter-chord cm=0 plus area-weighted **equivalent wrenches** conserves total loads but does not determine chordwise pressure or local structural stress. A physical aerodynamic-center/section-moment/load-deposition model must be specified before using it to claim structural torsion fidelity. The next authorized independent test can exercise a deliberately new adapter/fixture with actual damaged chains and structural feedback; it must preserve those boundaries, and it is not implemented or accepted by these static results.
+
+PR #9's original negative-capability evidence remains available at head `5a49d59`, with passing PR/push CI. This follow-up stays in PR #10 on `feature/lifting-line-reference`; no additional stacked PR or semantic production merge is needed. Outputs are `results/lifting-line-{summary.json,loads.csv}` and `results/section-transfer-{summary.json,strips.csv}`, retained by the focused CI job as `lifting-line-reference-evidence`. Numerical verification supports this declared linear reference and transfer, not historical airplane validity. Original production/acceptance code and the failed 10% hypothesis remain unchanged.
 
 ## How decisions change
 
