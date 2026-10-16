@@ -54,6 +54,9 @@ build/surface-sampling-tests: $(CORE) tests/surface_sampling_tests.cpp include/f
 build/sensor-history-probe: $(CORE) tests/sensor_history_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/sensor_history_probe.cpp -o $@
 
+build/finite-span-probe: $(CORE) tests/finite_span_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE) tests/finite_span_probe.cpp -o $@
+
 test: all
 	./build/surface-sampling-tests data/validation-material.airframe
 	./build/aerodynamics-tests data/validation-material.airframe
