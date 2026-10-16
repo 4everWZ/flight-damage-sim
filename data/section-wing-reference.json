@@ -18,5 +18,13 @@
     "section_cm_about_aerodynamic_center": 0.0,
     "valid_alpha_deg": [-5.0, 5.0]
   },
-  "load_transfer": "Area-weighted equivalent cell wrenches, including explicit couples to preserve the strip resultant at its declared aerodynamic center. Not a chordwise pressure or local structural-stress prediction."
+  "load_transfer": "Area-weighted equivalent cell wrenches, including explicit couples to preserve the strip resultant at its declared aerodynamic center. Not a chordwise pressure or local structural-stress prediction.",
+  "experimental_roll_control": {
+    "meaning": "Independent synthetic incidence mapping from actual settled actuator angles; not calibrated or inferred from legacy aerodynamic control_gain.",
+    "incidence_per_surface_rad": 0.5,
+    "left_center_y_m": -3.0,
+    "right_center_y_m": 3.0,
+    "gaussian_width_m": 0.9,
+    "tested_normalized_inputs": [-0.2, 0.0, 0.2]
+  }
 }

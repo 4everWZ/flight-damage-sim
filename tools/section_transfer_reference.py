@@ -50,7 +50,8 @@ def gauss(count):
     return result
 
 
-def strips(reference, chord, leading_x, ac_fraction, section, count, quadrature):
+def strips(reference, chord, leading_x, ac_fraction, section, count, quadrature,
+           slope_at=None):
     span, center, coefficients = (reference[k] for k in
                                   ('span_m', 'center_y_m', 'coefficients'))
     nodes, result = gauss(quadrature), []
@@ -67,7 +68,8 @@ def strips(reference, chord, leading_x, ac_fraction, section, count, quadrature)
             y = center + span/2*math.cos(theta)
             gamma, induced = local(coefficients, span, theta)
             cl = 2*gamma/(V*chord)
-            alpha_section = cl/section['cl_alpha_per_rad'] + math.radians(section['zero_lift_alpha_deg'])
+            local_slope = slope_at(theta) if slope_at else section['cl_alpha_per_rad']
+            alpha_section = cl/local_slope + math.radians(section['zero_lift_alpha_deg'])
             assert math.radians(section['valid_alpha_deg'][0]) <= alpha_section <= math.radians(section['valid_alpha_deg'][1])
             lift = RHO*V*gamma*dy
             di = lift*induced

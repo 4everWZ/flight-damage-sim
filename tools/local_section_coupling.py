@@ -23,6 +23,7 @@ def projected_frozen(intact, span, fraction, modes, quadrature=1024):
 
 
 def metrics(coefficients, span, chord, alpha, slope, section):
+    angle_at = alpha if callable(alpha) else lambda t: alpha
     area, ar = span*chord, span/chord
     lift = Q*area*math.pi*ar*coefficients[0]
     induced = Q*area*math.pi*ar*sum(n*a*a for n, a in enumerate(coefficients, 1))
@@ -42,11 +43,11 @@ def metrics(coefficients, span, chord, alpha, slope, section):
         t = math.pi*(i+.31)/513
         y = span/2*math.cos(t)
         gamma, ai = local(coefficients, span, t)
-        error = abs(2*gamma/(V*chord) - slope(t)*(alpha-ai))
+        error = abs(2*gamma/(V*chord) - slope(t)*(angle_at(t)-ai))
         residual.append(error)
         if abs(y) <= .9*span/2:
             interior.append(error)
-        max_angle = max(max_angle, abs(alpha-ai))
+        max_angle = max(max_angle, abs(angle_at(t)-ai))
     assert max_angle < math.radians(section['valid_alpha_deg'][1])
     assert abs(lift_i/lift-1) < 1e-10
     assert abs(induced_i/induced-1) < 1e-10

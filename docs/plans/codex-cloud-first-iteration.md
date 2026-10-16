@@ -12,7 +12,7 @@ The repository-local APEX skills preserve source content/license and do not modi
 
 ## Current bounded iteration
 
-Aerodynamic physical validity is the user's next priority, with no Jetson dependency. PR #9's counterexample remains available. In the same draft PR #10, the next bounded experiment changes only a localized synthetic section slope in the independent fixture. Frozen local load scaling passes integral conservation identities yet violates its own reconstructed wake's section closure; the recoupled solution changes far-wing load and roll moment despite almost the same total lift. See [the mechanism, actual measurements and next step](../decisions/current-decisions.md#localized-section-loss-wake-feedback-versus-local-force-scaling). Analytic compatibility, 96→128 refinement, mirrored response and steady force/moment/induced-power checks pass. Sharp-tip local residual remains explicit. Update the same PR and observe CI/remote state; do not broaden this into a new engine or a production patch. No old polar/default/acceptance semantics change; original 10% failure and the explicit-data decision remain. Next useful work is a bounded static control-incidence/remaining-roll-authority experiment, retaining section/wake closure and wrench conservation before any live feedback integration.
+Aerodynamic physical validity is the user's next priority, with no Jetson dependency. In the same draft PR #10, static roll authority now consumes actual settled C++ control-chain outputs at identical inputs for intact/local section loss. The independent declared incidence mapping retains section closure and conservative cell-wrench transfer. Incremental gain is ≈90.93% of intact over ±0.2 input, while a −867.20 N m neutral bias changes total-moment headroom. Actual-chain input +0.0375669 cancels static roll only; lift and six-axis trim remain different. The prior close-lift/different-roll mechanism is reproduced at neutral. A frozen +0.2 ablation leaves the ±5° domain and is recorded as rejected, with no relaxed limit. See [measurements and limitations](../decisions/current-decisions.md#static-roll-authority-through-actual-actuator-outputs). Commit/push to the same draft, observe CI/remote state and preserve old defaults/data/original 10% failure. Next useful bounded work is actual cable-disconnect/jam states at this static boundary; no structural/live-flight or production data interpretation is adopted.
 
 ### Previous clock investigation, completed
 
@@ -38,6 +38,7 @@ python3 tools/finite_span_experiments.py
 python3 tools/lifting_line_reference.py
 python3 tools/section_transfer_reference.py
 python3 tools/local_section_coupling.py
+python3 tools/roll_authority_reference.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
