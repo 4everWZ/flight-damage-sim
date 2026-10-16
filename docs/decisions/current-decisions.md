@@ -372,7 +372,50 @@ For an attached planar lifting wing, the established ideal elliptic-loading refe
 2. Local stall/post-stall validity next: independently sourced section data, AoA/rate/sideslip sweeps and asymmetric recovery, keeping static versus dynamic-stall claims separate. Classical attached-flow lifting line is not a solution for deep stall/spins; no universal stall extension has been chosen.
 3. Propeller-airframe effects and calibration follow: preserve the existing signed blade loads and coupled rotor accounting, then test measured blade/engine data and wake effects. Conservation alone does not validate propwash or historical performance.
 
-Adding an induced-drag term to today's mixed CD tables would risk double counting; replacing them silently would change trim, performance and damage interpretation. **No polar semantics, production force code, gains or acceptance thresholds change in this diagnostic.** The proposed section-table/finite-span contract must be surfaced before adopting it; the present work does not settle it. CSV/JSON are retained by CI as `finite-span-evidence`. No native GUI test or new historical-aircraft claim is made.
+Adding an induced-drag term to today's unsplit CD tables would risk double counting; replacing them silently would change trim, performance and damage interpretation. **No polar semantics, production force code, gains or acceptance thresholds change in this diagnostic.** The proposed section-table/finite-span contract must be surfaced before adopting it; the present work does not settle it. CSV/JSON are retained by CI as `finite-span-evidence`. No native GUI test or new historical-aircraft claim is made.
+
+## Independent attached-flow lifting-line reference
+
+### What the existing tables actually represent
+
+Inspection of `tools/make_fixture.py`, its first implementation in `601851d`, the three loaded airframes and the production lookup establishes **synthetic operational cell polars**, not measured section data or calibrated whole-wing data. All three wing tables are identical. At the generated knots up to ±15°, `cl=5.2*alpha`, `cd=.016+.07*cl²`, `cm=0`; post-stall values and drag rise are prescribed synthetic functions. There is no airfoil identity, Reynolds number, experimental provenance, stated reference aspect ratio, or profile/induced split. Plausible-looking slopes and quadratic drag do not establish those meanings. In particular, `.07*cl²` is neither proven pure induced drag nor proven pure viscous profile drag. "Unsplit" describes that absence of a contract, not a discovered physical decomposition.
+
+The loader also matters: production linearly interpolates **each coefficient in alpha**, then applies its separate bounded Mach multiplier to lift. At 2° the loaded/interpolated wing CD is **0.0217658**, versus **0.0183063** from evaluating the continuous generator formula between knots. The reference records both, and uses the loaded interpolation for its explicitly hypothetical profile interpretation. This difference is reported without changing the existing fixture or its lookup. The separate synthetic propeller polar is not used by this experiment.
+
+### Reference model and falsification
+
+`python3 tools/lifting_line_reference.py` is a standalone standard-library diagnostic; production never imports or calls it. Its declared model is steady, incompressible, small-angle, attached flow on straight planar connected wings, with an **explicit ideal section slope a0=2π/rad**, zero section zero-lift angle and no inferred profile drag. Speed is 70 m/s, density is the existing 1,000 m exponential value, and the free-stream angle is 2°. These are independently declared inputs, not a relabeling of the current polar.
+
+The physical basis is MIT Unified Fluids [lecture 6](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f06.pdf) (distributed wake induction), [lecture 7](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f07.pdf) (elliptic load and separate profile/induced contributions), [lecture 8](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f08.pdf) (section closure) and [lecture 9](https://web.mit.edu/16.unified/www/SPRING/fluids/Spring2008/LectureNotes/f09.pdf) (general Fourier loading). The implementation uses `y=yc+b*cos(theta)/2`, `Gamma=2*b*V*Σ An*sin(n*theta)`, induced angle `Σ n*An*sin(n*theta)/sin(theta)`, and the section relation `2*Gamma/(V*c)=a0*(alpha−alpha_i)`. A small dense collocation solve supplies the coefficients. Lift/induced drag are `CL=π*AR*A1`, `CDi=π*AR*Σ n*An²`; no empirical induced term is added.
+
+Checks and their limits:
+
+- Untwisted elliptic planforms at AR=6/10/12 and 16/32/64 modes reproduce analytic CL, uniform downwash and elliptic induced drag; maximum absolute CL error is **2.8e−17**.
+- A manufactured, smoothly twisted constant-chord wing has known first and second Fourier coefficients. Recovering both checks a non-elliptic loading mode and the roll normalization; it is an analytic code check, not a wind-tunnel validation.
+- For actual untwisted rectangles and tip cuts, 64→96 modes changes CL by <1.6e−7 relative and CDi by <9e−7 relative. Independent span integrals close lift and induced drag to <3.3e−16 relative, and roll to <1e−12 N m. Induced power is positive and span efficiency ≤1.
+- Integrated refinement is **not uniform local accuracy**: the intact rectangle's maximum off-collocation section-cl residual decreases from 0.0262 at 16 modes to 0.000811 at 96, concentrated near the sharp tip. At the centerline, 64→96 changes lift/span by <0.00006 N/m. No high-resolution tip-flow or viscous result is claimed.
+
+### Low-angle geometry and damage findings
+
+Rectangles use the fixture's geometric 10 m span and 1.5 m chord (15 m²); these geometric reference areas are distinct from its rounded sum of cell areas, 15.000064 m². Symmetric tip cutting removes the outer 1.25 m on each side. The equal-area comparator reduces chord to 1.125 m while retaining full span: it is a **span-preserving chord-reduction surrogate**, not a prediction for perforations or the earlier fractional-cell damage command.
+
+| Independent geometry | Lift at the same 2° (N) | Centerline load (N/m) | Centerline downwash (m/s) | Alpha for intact lift | Induced drag at that matched lift (N) |
+|---|---:|---:|---:|---:|---:|
+| Intact, b=10 m | 6493.26 | 738.47 | 0.38779 | 2.000° | 53.06 |
+| Symmetric tip cut, b=7.5 m | 4520.24 | 696.71 | 0.50406 | 2.873° | 92.85 |
+| Equal-area chord reduction, b=10 m | 5175.59 | 579.05 | 0.29428 | 2.509° | 54.12 |
+
+Thus induced coupling changes surviving local load and distinguishes equal-area geometries. At fixed angle the tip-cut induced drag actually falls from 53.06 to **45.00 N**, because lift falls; its drag penalty appears in the properly **matched-lift** comparison. Do not conflate these interventions. A one-sided left/right tip cut gives opposite FRD roll moments **∓3436.54 N m**, with equal lift ≈5498.47 N. This is static aerodynamic load asymmetry, not a demonstration that the real damaged pilot/control chain can trim it. Existing 6DoF, real controls and structural feedback were not exercised or weakened by this independent model.
+
+### Supported next boundary and unresolved material choice
+
+The experiment supports an **independent attached-flow strip-coupling reference** for contiguous wings and simple geometric tip loss. It does not support dropping this solver into the live core unchanged: no arbitrary missing patches, disconnected lifting surfaces, sweep, fuselage/tail interference, propwash, elastic iteration, transient wake, stall/spin, 120 Hz cost or damaged-control flight has been validated. In particular, a span-scale drag multiplier alone would miss the measured local load redistribution.
+
+Recommended bounded next integration experiment: an explicitly new, opt-in **synthetic section-data fixture** outside default production behavior, with profile drag and section lift/zero-lift slope declared separately and connected lifting-surface groups independent of the structural/control graphs. One span strip must aggregate chordwise cells for circulation, then distribute loads back to their physical cells; do not add a full induced drag contribution for each of four chord rows. Real surface/linkage state must set local aerodynamic incidence, and real loads must feed the existing structure. First check clean/tip-cut steady forces and mechanical work before any pilot or stall extension. This is a proposal for the next bounded test, not an implemented adapter or adopted data contract.
+
+The data choice remains material. For illustration only, treating old 5.2/rad as a **section** slope gives whole-wing CL≈**0.139954** at 2°, versus the old uniform incompressible value ≈**0.181514**. With that same hypothetical interpretation, using only .016 as profile plus computed induced drag gives total CD≈**0.016999**; using the **entire interpolated old CD** as profile plus induced gives ≈**0.021445**. The first discards an unexplained term; the second may double count it. Neither is licensed by provenance. Treating the old slope as a calibrated whole-wing result would instead require a separately specified inverse section calibration, for which no measurements exist. **Approval is required before adopting a production table meaning, migrating existing data, selecting a new default force law or changing acceptance interpretation.** No such choice is adopted here; ordinary independent reference experiments can continue without it.
+
+PR #9's original negative-capability evidence remains available at head `5a49d59`, with passing PR/push CI. This follow-up is additive on `feature/lifting-line-reference`; no new semantic production change is merged. Outputs are `results/lifting-line-summary.json` and `results/lifting-line-loads.csv`, retained by the focused CI job as `lifting-line-reference-evidence`. Numerical verification supports this declared linear reference, not historical airplane validity. Original production/acceptance code and the failed 10% hypothesis remain unchanged.
 
 ## How decisions change
 

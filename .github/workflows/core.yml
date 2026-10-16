@@ -6,6 +6,22 @@ on:
 permissions:
   contents: read
 jobs:
+  lifting-line-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independent low-angle lifting-line reference
+        run: python3 tools/lifting_line_reference.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lifting-line-reference-evidence
+          path: |
+            results/lifting-line-summary.json
+            results/lifting-line-loads.csv
+          if-no-files-found: error
   physics-and-controls:
     runs-on: ubuntu-latest
     timeout-minutes: 10
