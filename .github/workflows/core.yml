@@ -17,6 +17,8 @@ jobs:
         run: python3 tools/lifting_line_reference.py
       - name: Explicit sectional fixture and conservative cell transfer
         run: python3 tools/section_transfer_reference.py
+      - name: Local sectional loss and self-consistent wake coupling
+        run: python3 tools/local_section_coupling.py
       - uses: actions/upload-artifact@v4
         with:
           name: lifting-line-reference-evidence
@@ -25,6 +27,8 @@ jobs:
             results/lifting-line-loads.csv
             results/section-transfer-summary.json
             results/section-transfer-strips.csv
+            results/local-section-summary.json
+            results/local-section-loads.csv
           if-no-files-found: error
   physics-and-controls:
     runs-on: ubuntu-latest

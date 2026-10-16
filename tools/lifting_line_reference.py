@@ -41,7 +41,8 @@ def solve(span, chord, angle, slope, modes):
     # y = center + b/2 cos(theta), Gamma = 2 b V sum A_n sin(n theta).
     # Section closure: 2 Gamma/(V c) = a0 (alpha - alpha_induced).
     theta = [math.pi * i / (modes + 1) for i in range(1, modes + 1)]
-    matrix = [[math.sin(n * t) * (4 * span / (slope * chord(t))
+    slope_at = slope if callable(slope) else lambda t: slope
+    matrix = [[math.sin(n * t) * (4 * span / (slope_at(t) * chord(t))
                                  + n / math.sin(t))
                for n in range(1, modes + 1)] for t in theta]
     return linear_solve(matrix, [angle(t) for t in theta])

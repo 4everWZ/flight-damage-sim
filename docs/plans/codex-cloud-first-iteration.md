@@ -12,7 +12,7 @@ The repository-local APEX skills preserve source content/license and do not modi
 
 ## Current bounded iteration
 
-Aerodynamic physical validity is the user's next priority. PR #9's counterexample remains available. PR #10 contains the independent lifting-line reference and now a deliberately new opt-in sectional JSON fixture with conservative strip-to-cell transfer. Existing tables retain their synthetic operational meaning and alpha interpolation. See [physical findings and the small decision proposal](../decisions/current-decisions.md#small-decision-proposal-opt-in-sections-preserved-legacy). Lift/drag quadrature, equivalent force/moment/rigid-power transfer and chordwise subdivision pass; naive area-force deposition exhibits a large pitch/work counterexample. Equivalent couples do not establish chordwise pressure or local stress. Monitor full CI to terminal and preserve exact run results. No production/default/table migration or acceptance semantics change; actual damaged-control/structural coupling and an out-of-attached-flow contract remain future work, not completed claims.
+Aerodynamic physical validity is the user's next priority, with no Jetson dependency. PR #9's counterexample remains available. In the same draft PR #10, the next bounded experiment changes only a localized synthetic section slope in the independent fixture. Frozen local load scaling passes integral conservation identities yet violates its own reconstructed wake's section closure; the recoupled solution changes far-wing load and roll moment despite almost the same total lift. See [the mechanism, actual measurements and next step](../decisions/current-decisions.md#localized-section-loss-wake-feedback-versus-local-force-scaling). Analytic compatibility, 96→128 refinement, mirrored response and steady force/moment/induced-power checks pass. Sharp-tip local residual remains explicit. Update the same PR and observe CI/remote state; do not broaden this into a new engine or a production patch. No old polar/default/acceptance semantics change; original 10% failure and the explicit-data decision remain. Next useful work is a bounded static control-incidence/remaining-roll-authority experiment, retaining section/wake closure and wrench conservation before any live feedback integration.
 
 ### Previous clock investigation, completed
 
@@ -37,6 +37,7 @@ python3 tools/clock_experiments.py
 python3 tools/finite_span_experiments.py
 python3 tools/lifting_line_reference.py
 python3 tools/section_transfer_reference.py
+python3 tools/local_section_coupling.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```

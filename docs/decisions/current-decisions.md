@@ -415,6 +415,32 @@ That next boundary now has an isolated experiment: `data/section-wing-reference.
 
 The data choice remains material. For illustration only, treating old 5.2/rad as a **section** slope gives whole-wing CL≈**0.139954** at 2°, versus the old uniform incompressible value ≈**0.181514**. With that same hypothetical interpretation, using only .016 as profile plus computed induced drag gives total CD≈**0.016999**; using the **entire interpolated old CD** as profile plus induced gives ≈**0.021445**. The first discards an unexplained term; the second may double count it. Neither is licensed by provenance. Treating the old slope as a calibrated whole-wing result would instead require a separately specified inverse section calibration, for which no measurements exist. **Approval is required before adopting a production table meaning, migrating existing data, selecting a new default force law or changing acceptance interpretation.** No such choice is adopted here; ordinary independent reference experiments can continue without it.
 
+### Localized section loss: wake feedback versus local force scaling
+
+`python3 tools/local_section_coupling.py` asks one question: **does local scaling of an intact load remain a self-consistent solution after the local section law changes?** It reads only the explicit sectional fixture, holds its geometry/profile law/zero-lift angle and 2° incidence fixed, and reduces local section slope by the declared smooth factor `f(y)=1−0.5*exp(−((y+3)/0.6)²)`. This is a synthetic localized constitutive intervention centered at y=−3 m, **not** a perforation, lost area, structural damage, historical measurement or interpretation of legacy `lift_efficiency`. The Gaussian's far-wing tail is negligible, not a geometrically sharp damage boundary.
+
+Three arms distinguish the mechanism. Intact solves the original section law. The frozen-load ablation sets `Gamma_f=f*Gamma_intact`, projects that circulation into Fourier modes, and reconstructs **its own** induced flow to test the new section closure; it does not let that flow feed back into the selected circulation. Recoupled solves circulation and induced flow together with `a0(y)=f(y)*a0`. Only the independent reference solver gains a scalar-or-station-function slope input. Scalar/callable equality and the existing analytic reference checks pass; production code and data are unchanged.
+
+| 128-mode result at the same 2° | Total lift (N) | FRD roll (N m) | Induced drag (N) | Maximum section-cl closure residual in \|y\|≤4.5 m |
+|---|---:|---:|---:|---:|
+| Intact | 6493.255 | ≈0 | 53.058 | 1.17e−7 |
+| Frozen local scaling, intentionally inconsistent ablation | 6134.994 | −1069.020 | 52.670 | 0.09465 |
+| Recoupled sectional law/wake | 6147.548 | −867.198 | 48.587 | 1.05e−7 |
+
+The ablation is **not a valid alternate flight model**. Its integral lift, roll and positive induced-power identities still pass (relative force/power errors ≤2.3e−16), demonstrating that conservation identities alone do not enforce the local constitutive relation. Its roughly 0.095 interior closure defect is falsifying evidence against local force scaling as a substitute for solving this declared coupled model.
+
+Physical findings within the reference:
+
+- The frozen and recoupled total lifts differ by only **12.55 N**, while their roll moments differ by **201.82 N m** (~19% of the frozen magnitude). Small total-lift disagreement does not imply similar asymmetric load/moment response.
+- At y=−3 m, halving section slope gives recoupled lift/span **496.39 N/m**, versus intact **678.23** and frozen **339.11**; local induced flow becomes upwash ≈−0.320 m/s. That feedback partially restores the local load relative to simple scaling.
+- At effectively untouched y=+1 m, recoupled load falls from **733.46 to 725.96 N/m** as induced downwash increases. Frozen scaling leaves it unchanged to <0.001 N/m. Redistribution need not mean every intact region gains load.
+- Mirroring the intervention preserves lift and reverses roll within 1e−8 N/N m. Relative 96→128-mode changes are ≈2.1e−8 for lift, 2.0e−8 for roll and 1.0e−7 for induced drag. Interior closure residual falls from 0.00205 at 32 modes to 1.05e−7 at 128.
+- The fixed off-grid probe still sees a **~0.00194** maximum closure residual very near the sharp tips. Integrated/interior convergence does not establish uniformly resolved tip flow. All probed effective angles remain inside the fixture's ±5° domain; no stall extension is made.
+
+At fixed incidence the recoupled induced drag is lower because lift falls. Rescaling the linear reference to the intact **total lift** needs ≈2.11247° and induced drag ≈**54.205 N**, versus intact ≈53.058 N. This is an aerodynamic same-lift comparison, not trimmed flight or demonstrated remaining control authority. Power checks are steady `V*Di`/span-integral identities, not a time-integrated 6DoF energy ledger.
+
+**Supported next step:** require both section/wake closure and conservative cell-wrench transfer before using an experimental coupled solution for feedback. The next informative bounded experiment is static remaining roll authority with a declared local control-incidence perturbation (ideally sourced from the actual damaged chain), while retaining this closure check; first establish that boundary independently of the live default. These results do not authorize mapping legacy damage coefficients to section slopes, deriving chordwise pressure, or changing production data/default semantics. That choice remains for user review with the impact examples above. CSV/JSON are retained in the existing `lifting-line-reference-evidence` artifact; no additional PR or solver framework is introduced.
+
 ### Small decision proposal: opt-in sections, preserved legacy
 
 **Physical change proposed:** for explicitly sectional experimental data only, solve coupled spanwise circulation/downwash and add separately declared profile drag. Geometry and tip loss then change surviving loads and matched-lift induced drag. Keep span-preserving chord reduction labeled a geometric comparator; it is **not skin perforation**. Arbitrary holes and stalled/transient flow remain outside this reference.
