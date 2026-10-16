@@ -14,14 +14,29 @@ from local_section_coupling import metrics, projected_frozen
 from section_transfer_reference import strips, transfer, totals, add, scale, cross, dot, norm
 
 
-def actuator_rows(commands=None):
+def actuator_rows(commands=None, fault=None):
     args = [str(ROOT/'build/section-controls-probe'),
             str(ROOT/'data/validation-material.airframe')]
+    if fault is not None:
+        args.append('--fault='+fault)
     if commands is not None:
         args += [str(x) for x in commands]
     raw = subprocess.check_output(args, text=True)
     return [{k: float(v) for k, v in row.items()}
             for row in csv.DictReader(io.StringIO(raw))]
+
+
+def control_angle(fixture, row):
+    geometry, section, control = (fixture[k] for k in
+                                  ('geometry', 'section_2d', 'experimental_roll_control'))
+    def angle(t):
+        y = geometry['span_m']/2*math.cos(t)
+        left = math.exp(-((y-control['left_center_y_m'])/control['gaussian_width_m'])**2)
+        right = math.exp(-((y-control['right_center_y_m'])/control['gaussian_width_m'])**2)
+        return (math.radians(2-section['zero_lift_alpha_deg'])
+                + control['incidence_per_surface_rad']
+                * (row['left_rad']*left-row['right_rad']*right))
+    return angle
 
 
 def checked_transfer(a, span, chord, geometry, section, slope, reference_metrics):
@@ -67,15 +82,7 @@ def main():
     def fraction(t):
         y = span/2*math.cos(t)
         return 1-.5*math.exp(-((y+3)/.6)**2)
-    def angle_for(row):
-        def angle(t):
-            y = span/2*math.cos(t)
-            left = math.exp(-((y-control['left_center_y_m'])/control['gaussian_width_m'])**2)
-            right = math.exp(-((y-control['right_center_y_m'])/control['gaussian_width_m'])**2)
-            return (math.radians(2-section['zero_lift_alpha_deg'])
-                    + control['incidence_per_surface_rad']
-                    * (row['left_rad']*left-row['right_rad']*right))
-        return angle
+    angle_for = lambda row: control_angle(fixture, row)
     def run(row, modes, include_frozen=False):
         angle = angle_for(row)
         intact = solve(span, lambda t: chord, angle, a0, modes)

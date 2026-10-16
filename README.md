@@ -26,6 +26,7 @@ python3 tools/lifting_line_reference.py  # independent low-angle reference; no p
 python3 tools/section_transfer_reference.py  # explicit sectional fixture; equivalent cell wrenches, not a pressure map
 python3 tools/local_section_coupling.py  # localized section-slope loss: frozen loads versus self-consistent wake
 python3 tools/roll_authority_reference.py  # real settled controls; static roll gain versus damage bias, independent section model
+python3 tools/control_fault_reference.py  # actual disconnect/captured-angle jam crossed with local section loss; static only
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.

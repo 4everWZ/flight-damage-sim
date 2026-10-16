@@ -466,7 +466,37 @@ Verification and falsifiers:
 - With actual zero input, the prior frozen-versus-recoupled comparison reproduces **12.5537 N** lift difference and **201.8224 N m** roll difference. That earlier close-lift comparison was between two damaged-load treatments, not between intact and damaged aircraft. It remains a reason to measure moments and authority separately.
 - The first attempted controlled frozen ablation at +0.2 reached effective angle **5.27977°**, outside the declared section domain. This failed domain check is preserved in JSON. It is excluded from authority estimation; only its neutral-point mechanism check is retained. No input bound, section limit or original acceptance threshold is relaxed.
 
-**Supported next step:** add actual cable-disconnect or jam states to the same static control-chain boundary and measure remaining incremental gain plus bias-cancellation headroom. The present comparison isolates aerodynamic section loss with identical intact hardware. It does not establish behavior of simultaneously damaged control links, structural feedback, body motion or stall. Production defaults, legacy aerodynamic data and the original failed 10% hypothesis remain untouched; adoption or reinterpretation of production data is still a separate decision. Results are `roll-authority-summary.json`/`roll-authority.csv` in the existing evidence artifact and the same draft PR #10.
+This first comparison isolates aerodynamic section loss with identical intact hardware; the disconnect/jam follow-up below measures actual hardware faults at the same boundary. Neither establishes structural feedback, body motion or stall. Production defaults, legacy aerodynamic data and the original failed 10% hypothesis remain untouched; adoption or reinterpretation of production data is still a separate decision. Results are `roll-authority-summary.json`/`roll-authority.csv` in the existing evidence artifact and the same draft PR #10.
+
+### Disconnect versus captured-angle jam
+
+`python3 tools/control_fault_reference.py` crosses three real hardware states (normal, left link disconnected, left surface jammed) with clean versus the preceding local section-slope loss: **six static cases**, each at the same −0.2/0/+0.2 requests and declared sectional/control mapping. Only the independent probe/orchestration changes; production C++ mechanics, old aerodynamic data and failure thresholds do not.
+
+Fault semantics come directly from existing `Simulation::disconnect` and `advance_surface`:
+
+- Fault arms first hold +0.2 for one second. Both have actual pre-fault left angle **+3.831985°**. Immediately after either event the angle is unchanged; the probe never writes `deflection`.
+- Disconnect calls the existing API, clearing `connected`; the existing actuator update then targets neutral. After settling, left angle is **0°** for every tested request. This is the current model's neutral-seeking behavior, not a validated free-floating hinge model.
+- Jam sets the existing `jammed` flag and captures the actual pre-fault angle in `jam_position`; the authoritative update freezes it at **+3.831985°**, regardless of subsequent request. It does not teleport to an arbitrary specified angle.
+- The right chain receives identical requests and has the same settled positions as the normal bench. Direct roll ownership remains 1, even when the left actuator cannot follow. Samples at one and two seconds after the event verify settlement; the full event/force transient is not simulated.
+
+| Hardware | Section loss | Neutral roll bias (N m) | Incremental gain / clean intact | Static zero-roll input | Within tested interval |
+|---|---|---:|---:|---:|---|
+| Normal | No | ≈0 | 100% | ≈0 | Interior |
+| Normal | Yes | −867.20 | 90.93% | +0.03757 | Interior |
+| Left disconnected | No | ≈0 | 50.00% | ≈0 | Interior |
+| Left disconnected | Yes | −867.20 | 50.26% | +0.06796 | Interior |
+| Left jammed at captured angle | No | +2538.65 | 50.00% | −0.20000 | Negative boundary |
+| Left jammed at captured angle | Yes | +1197.58 | 50.26% | −0.09385 | Interior |
+
+**Finding:** disconnect and jam have the same incremental gain for a given section law because the same right actuator remains input-responsive, but their neutral biases and available command headroom differ. In clean aero their gains are ≈12,693.24 N m/input; with local section loss they are ≈12,760.18, versus the full clean value ≈25,386.49. The small single-right gain increase (~0.53%) is a result of this linear coupled reference, not recovery of the missing left input response or a general law for damaged aircraft. The reference's full two-actuator gain still decreases to the previously measured 90.93%.
+
+Adding the local section loss partially opposes the positive jam bias, moving the zero-roll command inward. It **does not restore control gain**. A smaller neutral moment cannot stand in for healthier controls. Conversely, the clean jam case reaches zero roll at the edge of the **tested** interval: its near-zero negative command headroom is not a claim about the mechanical stop, full-stick authority or an aircraft-wide loss-of-control threshold.
+
+All in-interval zero-roll commands are resampled through the actual faulted C++ bench and re-solved (|Mx|<1e−6 N m). Their lift differs substantially: clean jam cancellation gives ≈**8530.63 N** versus the clean intact ≈6493.26 N; section loss plus disconnect gives ≈**5803.23 N**. No result is called six-axis trim, dynamic recovery or structural survivability.
+
+The 18 sampled physical states have maximum effective section angle ≈**3.66024°**, interior section/wake residual ≤**1.36e−7**, relative 96→128-mode roll changes <**1.5e−8**, and conservative strip/cell force/moment/rigid-power errors ≤**4.1e−11**. Existing ±5°, closure, transfer and original acceptance limits remain unchanged. No event energy impulse, time-integrated body dynamics, chordwise pressure or hinge free-floating physics is claimed. The default prior experiment still reproduces retained gain 0.90930636.
+
+**Next experiment and decision boundary:** a short held-rig actuator/torque trace immediately after these same faults can distinguish transient from settled authority without a new production-model choice. Recommendation: retain current defaults and measure that bounded transition first. Replacing neutral-seeking disconnect with aerodynamic free floating would require an explicit hinge moment/inertia/damping model and a separately reviewed production semantic/data decision; the static results do not choose it. CSV/JSON (`control-fault-summary.json`, `control-fault-curves.csv`) stay in the existing artifact and draft PR #10.
 
 ### Small decision proposal: opt-in sections, preserved legacy
 

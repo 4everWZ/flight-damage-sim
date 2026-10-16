@@ -12,7 +12,7 @@ The repository-local APEX skills preserve source content/license and do not modi
 
 ## Current bounded iteration
 
-Aerodynamic physical validity is the user's next priority, with no Jetson dependency. In the same draft PR #10, static roll authority now consumes actual settled C++ control-chain outputs at identical inputs for intact/local section loss. The independent declared incidence mapping retains section closure and conservative cell-wrench transfer. Incremental gain is ≈90.93% of intact over ±0.2 input, while a −867.20 N m neutral bias changes total-moment headroom. Actual-chain input +0.0375669 cancels static roll only; lift and six-axis trim remain different. The prior close-lift/different-roll mechanism is reproduced at neutral. A frozen +0.2 ablation leaves the ±5° domain and is recorded as rejected, with no relaxed limit. See [measurements and limitations](../decisions/current-decisions.md#static-roll-authority-through-actual-actuator-outputs). Commit/push to the same draft, observe CI/remote state and preserve old defaults/data/original 10% failure. Next useful bounded work is actual cable-disconnect/jam states at this static boundary; no structural/live-flight or production data interpretation is adopted.
+Aerodynamic physical validity is the user's next priority, with no Jetson dependency. In the same draft PR #10, real C++ disconnect/captured-angle jam states are now crossed with clean/local section loss in a six-case static comparison. Same remaining input-responsive hardware gives equal incremental gain for cut and jam, but jam bias and cancellation headroom differ; added section loss can oppose bias without restoring gain. Fault events preserve the immediate actual angle, then disconnect follows the existing neutral-seeking update while jam freezes its captured position. See [measurements, semantics and decision boundary](../decisions/current-decisions.md#disconnect-versus-captured-angle-jam). Closure, load transfer, domain, actual root resampling and 96→128 checks pass; prior baseline/failures remain. Commit/push to the same draft and observe full CI/remote state. Next useful bounded work is a short held-rig fault-transition trace under existing semantics. Changing disconnect to free-floating hinge physics or adopting a new production/default/data contract requires a separate decision; none is made here. No static cancellation is called six-axis trim or dynamic recovery.
 
 ### Previous clock investigation, completed
 
@@ -39,6 +39,7 @@ python3 tools/lifting_line_reference.py
 python3 tools/section_transfer_reference.py
 python3 tools/local_section_coupling.py
 python3 tools/roll_authority_reference.py
+python3 tools/control_fault_reference.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
