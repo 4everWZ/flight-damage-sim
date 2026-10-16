@@ -12,7 +12,7 @@ The repository-local APEX skills preserve source content/license and do not modi
 
 ## Current bounded iteration
 
-Aerodynamic physical validity is the user's next priority. The first finite-span counterexample remains measured and available in PR #9. The independent attached-flow lifting-line experiment now reproduces elliptic analytic loads/downwash, a known twisted-rectangle mode, refinement and force/power integrals. Equal-area tip/chord loss gives different surviving load and matched-lift drag, while mirrored one-sided tip cuts reverse aerodynamic roll. See [physical findings, provenance and proposed boundary](../decisions/current-decisions.md#independent-attached-flow-lifting-line-reference). Existing tables are synthetic operational cell polars with no 2D/whole-wing or profile/induced contract; actual lookup also interpolates CD linearly between alpha knots. No production model or acceptance semantics change. Commit/push this standalone diagnostic and observe its focused CI. Before production adoption, explicitly approve data meaning/default behavior; the supported next experiment is a new opt-in declared section-data fixture with strip coupling and real control/structural boundaries, not another clock patch or a universal stall solver.
+Aerodynamic physical validity is the user's next priority. PR #9's counterexample remains available. PR #10 contains the independent lifting-line reference and now a deliberately new opt-in sectional JSON fixture with conservative strip-to-cell transfer. Existing tables retain their synthetic operational meaning and alpha interpolation. See [physical findings and the small decision proposal](../decisions/current-decisions.md#small-decision-proposal-opt-in-sections-preserved-legacy). Lift/drag quadrature, equivalent force/moment/rigid-power transfer and chordwise subdivision pass; naive area-force deposition exhibits a large pitch/work counterexample. Equivalent couples do not establish chordwise pressure or local stress. Monitor full CI to terminal and preserve exact run results. No production/default/table migration or acceptance semantics change; actual damaged-control/structural coupling and an out-of-attached-flow contract remain future work, not completed claims.
 
 ### Previous clock investigation, completed
 
@@ -36,6 +36,7 @@ python3 tools/load_sample_experiments.py
 python3 tools/clock_experiments.py
 python3 tools/finite_span_experiments.py
 python3 tools/lifting_line_reference.py
+python3 tools/section_transfer_reference.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```

@@ -15,12 +15,16 @@ jobs:
           persist-credentials: false
       - name: Independent low-angle lifting-line reference
         run: python3 tools/lifting_line_reference.py
+      - name: Explicit sectional fixture and conservative cell transfer
+        run: python3 tools/section_transfer_reference.py
       - uses: actions/upload-artifact@v4
         with:
           name: lifting-line-reference-evidence
           path: |
             results/lifting-line-summary.json
             results/lifting-line-loads.csv
+            results/section-transfer-summary.json
+            results/section-transfer-strips.csv
           if-no-files-found: error
   physics-and-controls:
     runs-on: ubuntu-latest
