@@ -496,7 +496,38 @@ All in-interval zero-roll commands are resampled through the actual faulted C++ 
 
 The 18 sampled physical states have maximum effective section angle ≈**3.66024°**, interior section/wake residual ≤**1.36e−7**, relative 96→128-mode roll changes <**1.5e−8**, and conservative strip/cell force/moment/rigid-power errors ≤**4.1e−11**. Existing ±5°, closure, transfer and original acceptance limits remain unchanged. No event energy impulse, time-integrated body dynamics, chordwise pressure or hinge free-floating physics is claimed. The default prior experiment still reproduces retained gain 0.90930636.
 
-**Next experiment and decision boundary:** a short held-rig actuator/torque trace immediately after these same faults can distinguish transient from settled authority without a new production-model choice. Recommendation: retain current defaults and measure that bounded transition first. Replacing neutral-seeking disconnect with aerodynamic free floating would require an explicit hinge moment/inertia/damping model and a separately reviewed production semantic/data decision; the static results do not choose it. CSV/JSON (`control-fault-summary.json`, `control-fault-curves.csv`) stay in the existing artifact and draft PR #10.
+The held-rig transition follow-up below distinguishes transient from settled authority without a new production-model choice. Replacing neutral-seeking disconnect with aerodynamic free floating would still require an explicit hinge moment/inertia/damping model and a separately reviewed production semantic/data decision; these results do not choose it. CSV/JSON (`control-fault-summary.json`, `control-fault-curves.csv`) stay in the existing artifact and draft PR #10.
+
+### Fault transitions: continuity and time sampling
+
+`python3 tools/control_transition_reference.py` completes this bounded control-fault investigation. A new small C++ probe drives the **existing** control update on a held body with constant +0.2 direct-roll input for 0.25 s. At 120/240/480 Hz, compare normal hardware, disconnect and captured-angle jam at **1/60 s** (surface still moving) or **0.125 s** (surface settled). The normal trace is shared, giving 15 hardware traces. All events align with every tested grid: this tests the same physical input/event schedule, not arbitrary within-tick event quantization. Pressure is fixed and the loaded fixture has zero actuator lag/friction; no parameter is reset to make it fit the analytic comparison.
+
+Before/after event rows have the **same timestamp**. The API/configuration changes neither physical deflection nor held-body position/velocity/rates/quaternion. Actual subsequent surface increments obey the existing slew bound. Internal `filtered` driver values can reset on the next update: for late disconnect at 120 Hz, the driver changes −4.4° while the physical angle changes only −0.725755°. For early/late jam the driver resets by −2.94849°/−0.568015°, while physical angle stays fixed. A driver/cache reset is not a surface-position jump.
+
+Real endpoint and `midpoint_deflection` traces drive the **same declared steady linear sectional reference**, with clean and locally reduced section slope. The affine control response is obtained from the existing solver, checked against fresh solves at 15 distinct corner/event/first-step/end states per aero model (maximum coefficient difference <9e−19). Corner closure bounds are <1.34e−7, effective angles <3.63°, and representative wrench-transfer errors <3.3e−11. This uses linearity for efficient trace evaluation; it is no new unsteady-flight engine or pressure law.
+
+Findings:
+
+- Event-time physical angle and quasi-steady roll-torque jumps are **zero**. Endpoint angle differs from the continuous fixed-rate/target actuator solution by ≤2.8e−17 rad; common-time differences between the three grids are ≤1.8e−18 rad and ≤2.3e−13 N m in roll torque.
+- Moving jam captures ≈**1.45151°**, versus ≈**3.83198°** after settling. Right hardware keeps moving toward the held target. An early clean disconnect can initially leave total roll torque unchanged because left/right rate contributions cancel; an early jam still permits torque to rise as the right surface moves. A fault does not always cause an immediate torque drop.
+- Settled jam at the already-commanded position produces **no torque-trace change under this unchanged input**, despite the lost future input responsiveness measured in the previous static study. One present torque sample cannot establish healthy control authority.
+- Late clean disconnect's first-step roll change is about **−480.80 / −240.40 / −120.20 N m** at 120/240/480 Hz. This finite rate-driven change scales with interval duration; it is not an event-time discontinuity.
+
+Torque-time integration separates endpoint sampling from the actual control midpoint. For the late clean disconnect, compare the time integral over the same 0.25 s with the analytic piecewise-linear actuator trajectory and linear sectional response:
+
+| Hz | Endpoint-sample integral error (N m s) | Actual-midpoint integral error (N m s) |
+|---:|---:|---:|
+| 120 | +10.17383 | +0.157063 |
+| 240 | +5.16545 | +0.096962 |
+| 480 | +2.63120 | +0.001803 |
+
+All midpoint errors satisfy the declared piecewise-linear corner bound `(2*abs(K_left)*rate_left + abs(K_right)*rate_right)*h²/8`; event boundaries are common grid points. Settling-corner phase changes the observed error ratios, so the three measurements are not advertised as a universal 4× reduction per refinement. The endpoint rule shows the expected first-order bias. **No production defect is demonstrated or repaired here:** the existing production airframe and detached-force paths already consume midpoint surface samples. This control-only benchmark neither replaces the original all-rate 10% hypothesis (still false) nor proves full-system numerical/historical validity.
+
+The force trace is quasi-steady on a held rig. Its torque-time integral is not body angular momentum, a dynamic flight-recovery result or an energy ledger. No actuator inertia/velocity-energy state or jam-reaction impulse is introduced; validating those phenomena would require a different model/data contract. Arbitrary substep events, varying pressure, nonzero actuator lag/friction, unsteady wakes and body/structural feedback are outside this experiment.
+
+**Diagnostic merge assessment:** after the current head's full CI passes, this group is a self-contained, reproducible **independent diagnostic increment**: it establishes and bounds its reference, keeps real control/fault semantics, records previous negative findings, and requires no human GUI/handling test for its stated claims. It contains no production force-law/default/data migration and is suitable to merge as diagnostic tooling, **not** as adoption of a new flight model or full v0.1 acceptance. PR #10 still depends on PR #9's feature branch; integration must preserve that baseline and use the appropriate target/order. This assessment does not merge either draft or make the unresolved production-data/free-hinge choices.
+
+No further patch is selected from these traces. A later body-dynamics or nonsteady-physics study is a separate bounded claim; free-floating hinges or a production section-data/default change need the explicit choices already described. The current group's raw hardware CSV, quasi-steady force CSV and summary JSON (`control-transition-*`) are retained in the same evidence artifact.
 
 ### Small decision proposal: opt-in sections, preserved legacy
 

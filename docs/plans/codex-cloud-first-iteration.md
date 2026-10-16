@@ -12,7 +12,7 @@ The repository-local APEX skills preserve source content/license and do not modi
 
 ## Current bounded iteration
 
-Aerodynamic physical validity is the user's next priority, with no Jetson dependency. In the same draft PR #10, real C++ disconnect/captured-angle jam states are now crossed with clean/local section loss in a six-case static comparison. Same remaining input-responsive hardware gives equal incremental gain for cut and jam, but jam bias and cancellation headroom differ; added section loss can oppose bias without restoring gain. Fault events preserve the immediate actual angle, then disconnect follows the existing neutral-seeking update while jam freezes its captured position. See [measurements, semantics and decision boundary](../decisions/current-decisions.md#disconnect-versus-captured-angle-jam). Closure, load transfer, domain, actual root resampling and 96→128 checks pass; prior baseline/failures remain. Commit/push to the same draft and observe full CI/remote state. Next useful bounded work is a short held-rig fault-transition trace under existing semantics. Changing disconnect to free-floating hinge physics or adopting a new production/default/data contract requires a separate decision; none is made here. No static cancellation is called six-axis trim or dynamic recovery.
+The current independent control-fault group is complete in scope: held-input moving/settled disconnect and captured-angle jam traces now compare 120/240/480 Hz using real C++ actuator states. Event-time physical angle/torque is continuous, common-time states agree, and actual midpoint torque integration satisfies the same piecewise-linear trajectory's error bound. Internal driver/cache resets are distinguished from surface motion. No implementation defect is demonstrated and no production patch is selected. See [findings, limits and diagnostic merge assessment](../decisions/current-decisions.md#fault-transitions-continuity-and-time-sampling). Push the same draft PR #10 and observe its full CI; after checks, this is mergeable as an independent diagnostic increment with PR #9's baseline/target dependency preserved, not a new default flight model or full acceptance. The original 10% failure and all earlier negative findings remain. Further body/unsteady/hinge-model work is a separate bounded claim and any production-data/default/free-floating semantic change still requires an explicit decision. No static cancellation is called six-axis trim or dynamic recovery.
 
 ### Previous clock investigation, completed
 
@@ -40,6 +40,7 @@ python3 tools/section_transfer_reference.py
 python3 tools/local_section_coupling.py
 python3 tools/roll_authority_reference.py
 python3 tools/control_fault_reference.py
+python3 tools/control_transition_reference.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```

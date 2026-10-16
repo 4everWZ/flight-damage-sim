@@ -27,6 +27,7 @@ python3 tools/section_transfer_reference.py  # explicit sectional fixture; equiv
 python3 tools/local_section_coupling.py  # localized section-slope loss: frozen loads versus self-consistent wake
 python3 tools/roll_authority_reference.py  # real settled controls; static roll gain versus damage bias, independent section model
 python3 tools/control_fault_reference.py  # actual disconnect/captured-angle jam crossed with local section loss; static only
+python3 tools/control_transition_reference.py  # held-input fault timing; continuity and endpoint/midpoint torque quadrature
 ```
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
