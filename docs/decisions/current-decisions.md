@@ -313,6 +313,40 @@ The next bounded mechanism test can fix the physical plant at 960 Hz and the for
 
 `python3 tools/load_sample_experiments.py` builds the existing probe and runs its independent `age` mode. It writes `load-sample-summary.json`, case data and a control-time/force-time/bracket/mass/G trace under ignored `results/`; CI retains them in `control-evidence`. `python3 tools/control_experiments.py` continues to reproduce the separate original grid. No GUI or historical-aircraft fidelity claim follows from this one synthetic 5 s maneuver.
 
+## Final clock decomposition and the remaining semantics choice
+
+This completes the clock investigation. Production core, gains, damage/control requirements and the original acceptance script/10% threshold are unchanged. All experimental arms use the **same 960 Hz physical kernel**, real physical control chains, rotor and structural updates. The controller consumes a separate sensor packet and emits normalized requests through the existing physical input boundary; it does not write a physical pose or prescribe a surface position.
+
+At a sensor event, capture current body/density and raw body-normal aerodynamic force at `sensor_time−declared_age`. Hold that packet. Each internal controller event reads it and normalizes raw force with **current** mass. An output event latches the latest computed request, which the physical actuators consume until the next output event. Events at one physical tick are ordered material/key event → sensor read → controller update → output latch → physical step. Rates are exact integer divisors of 960 Hz, and the keyboard/mass transitions align with every clock. The known initial trim force is explicitly recorded at t=0 and extended as constant prehistory; this supplies the newly exercised zero-time sample without extrapolating an unknown bracket.
+
+| Arm | Internal update / sensor read / output (Hz) | Force age at sensor read | 5 s material-effect norm | Conditional vector shift from preceding arm |
+|---|---|---:|---:|---:|
+| A | 120 / 120 / 120 | 4.1667 ms | 0.243044 m | — |
+| B | 960 / 120 / 120 | 4.1667 ms | 0.219375 m | A→B: 0.052270 m |
+| C | 960 / 960 / 120 | 4.1667 ms | 0.223184 m | B→C: 0.023771 m |
+| D | 960 / 960 / 960 | 4.1667 ms | 0.405566 m | C→D: 0.254552 m |
+| E | 960 / 960 / 960 | 0.52083 ms (native 960) | 0.405052 m | D→E: 0.000574 m |
+| F, separate pair cross-check | 240 / 240 / 240 | 2.0833 ms (native 240) | 0.323385 m | A→F: 0.121806 m |
+
+The path differences are conditional interventions in a nonlinear feedback system; their norms are **not** additive percentages or a unique global ranking of factors. Output hold has the largest shift along this declared path, with internal/sensor rates already at 960 Hz. Faster internal updates with slower sensors repeatedly consume a held packet: B reaches 7.2917 ms packet age and 11.4583 ms raw-force age at internal updates, even though force age **at sensor read** remains 4.1667 ms. This is explicit sample/hold behavior, not a mislabeled fresh sensor.
+
+Both endpoint controls pass. A exactly matches the previous fixed-age 960 Hz physical run in final position/velocity/rates/quaternion and in the full 120 Hz raw-force/G trace. E reproduces **every** default native 960 Hz physical/control step with zero reported position, velocity, rates, attitude, G, request, PI, ownership, pause and actuator errors, including material removal. Timestamp/latch counts, causal force brackets and current-mass normalization also pass.
+
+Early traces identify the mechanisms before changed physical requests feed back:
+
+- A/B begin with the same pitch rate error, ~0.00554604. The algorithm updates bias by `Ki*error*h` and then emits `Kp*error+bias_updated`. The unpaused pitch increment is 5.54604e−5 at 120 Hz and 6.93255e−6 at 960 Hz, ratio 8, immediately changing the request by 4.85278e−5. This is the existing discrete update/output convention with unchanged gains, not evidence of a new stored-integral defect.
+- B/C apply identical requests for the first 1/120 s and have identical current error at that next common output. Their prior integral histories differ because B held the old observation while C sampled between output ticks. The pitch request then differs by ~6.43219e−7.
+- C/D compute the same pitch request at 1/960 s, ~0.00776310. C still applies the previous ~0.00777139 request while D immediately latches the new one. Thus output cadence changes the actual physical input with the same computation and initial physical state.
+- D/E initially share the same applied input; at 1/960 s their force timestamps are −0.003125 s versus +0.00052083 s. The different known old/applied force produces G≈0.988916 versus 0.988533. The force-age intervention is distinct from controller and output clocks.
+
+The direct original-pair cross-check is decisive about the comparison's meaning. Default native 120/240 Hz flights disagree in the material-effect vector by **0.124183 m**. With physical integration/actuation held at 960 Hz, the corresponding 120/240 Hz sampled control contracts still disagree by **0.121806 m**. Physical refinement within each fixed contract shifts its vector only ~0.008907 m (120 Hz contract) and ~0.002336 m (240 Hz contract). E's exact native closure confirms that this decomposition reaches the actual all-rate high-frequency endpoint rather than a different simulated controller.
+
+**Interpretation:** the original grid changes the sampled feedback system as well as the physical discretization. It is not a pure convergence study of one fixed sampled controller. No new production implementation defect is demonstrated, so this sequence ends without another physics/control patch. The original full-system 10% hypothesis remains **false**. If the intent is the continuous-controller limit of the whole all-rates system, that failure remains a legitimate unmet goal; the experiment does not dismiss it or adopt a replacement pass criterion.
+
+**User review when awake:** decide what the 10% expectation is intended to constrain. One option is numerical convergence of the actual 120 Hz digital Instructor, with its update/read/output/force-age contract held fixed; another is an additional requirement for the entire controller/sensor/output system to be insensitive to rate changes or approximate a declared continuous law. The latter needs explicit PI state/output and measurement timing semantics before any algorithm change. The original §5 fixes simulation at 120 Hz; §46 gives Instructor 120 Hz as a future frequency example subject to measurement, but does not settle this benchmark interpretation. Recommendation: make the existing production timing explicit and retain the native all-rates result as separate rate-sensitivity evidence; **any acceptance reclassification requires user review and is not made here**.
+
+`python3 tools/clock_experiments.py` runs the completed six-arm diagnostic and native baselines, producing `clock-summary.json`, raw cases, applied-request/timestamp/state traces and the fixed-age reference trace under ignored `results/`. CI retains them as `clock-evidence`. This one synthetic maneuver does not establish historical or universal closed-loop fidelity. No native GUI/human handling was validated.
+
 ## How decisions change
 
 Record a testable hypothesis, actual result, uncertainty and useful next experiment. Routine reversible implementation choices can proceed; any choice removing or weakening a core requirement must be reported first. Preserve failed evidence when it changes interpretation. Do not turn partial mechanisms, stubs or a rendered aircraft into a claim of full v0.1 completion.

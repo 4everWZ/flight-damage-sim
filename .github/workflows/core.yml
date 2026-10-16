@@ -26,6 +26,7 @@ jobs:
           python3 tools/control_experiments.py
           python3 tools/sensor_history_experiments.py
           python3 tools/load_sample_experiments.py
+          python3 tools/clock_experiments.py
       - name: Exercise live input and render transport
         run: |
           python3 -m pip install -r requirements-viewer.txt
@@ -73,4 +74,14 @@ jobs:
             results/load-sample-summary.json
             results/load-sample-cases.txt
             results/load-sample-trace.csv
+          if-no-files-found: error
+      - name: Preserve final clock decomposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock-evidence
+          path: |
+            results/clock-summary.json
+            results/clock-cases.txt
+            results/clock-trace.csv
+            results/clock-age-reference.csv
           if-no-files-found: error

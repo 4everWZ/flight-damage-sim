@@ -6,15 +6,15 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15. PR #2–#6 have merged with observed successful post-merge main workflows. This iteration starts from merged main `e70dca1` and uses `feature/load-sample-age`. Numerical lift-work and surface-force-sampling repairs remain local improvements, not acceptance of strong-roll fidelity. Preserve user viewer changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Open drafts for review/checks, then merge eligible bounded work under standing authorization and verify resulting main CI.
+The user authorized automatic merging of bounded changes that require no human testing on 2026-10-15. PR #2–#7 have merged with observed successful post-merge main workflows. This final clock investigation starts from main `5f42d92` on `feature/clock-decomposition`. Numerical lift-work and surface-sampling repairs remain valid local improvements. Preserve user changes, original spec and isolated environments; do not add Cloud agent configuration to Git. Review physical claims independently of CI, merge eligible bounded diagnostic work only after checks, and verify resulting main CI.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
 ## Current bounded iteration
 
-Hold the original raw-force sample age at 1/240 s and controller/request clock at 120 Hz while refining the physical plant. Preserve conversion to G with current mass after material removal. The controlled 120 Hz loop now reproduces all default per-step physical/control observables exactly; the fixed-age 120/240 effect difference is ~0.00560 m. Causal timestamps, force reconstruction and mass-event checks pass.
+The final discriminating experiment is complete: keep the physical kernel/actuators/rotor/structure at 960 Hz; independently change internal controller update, sensor read and request output clocks, then close at the native force age. The coarse endpoint matches the previous fixed-age run and the high endpoint reproduces the default native 960 Hz chain exactly. A separate 240 Hz sampled-system cross-check reproduces ~0.12181 m of effect disagreement on identical physical stepping, versus ~0.12418 m in the original native comparison.
 
-This is a useful negative result for further production patching: no new implementation defect is established, and no production core or original acceptance code is changed. The native all-rates discrepancy remains ~0.12418 m and its 10% hypothesis remains false. Next isolate internal update, sensor-read and output clocks on a fixed 960 Hz physical plant, then separately review the intended sampled/continuous-controller target before any acceptance interpretation or gain change. Details and limits live in [current decisions](../decisions/current-decisions.md#original-load-sample-age-under-physical-refinement).
+No new production defect is established and no production/gain/acceptance code changes. The original 10% hypothesis remains false. This experimental sequence ends here. Await the user's review of whether the expectation means fixed-production-controller physical convergence, or additional whole-loop rate insensitivity/continuous-limit fidelity. No interpretation is adopted and no further clock-driven patches are selected. Evidence, mechanism and the concrete review choice belong to [current decisions](../decisions/current-decisions.md#final-clock-decomposition-and-the-remaining-semantics-choice).
 
 ## Reproduce
 
@@ -29,6 +29,7 @@ python3 tools/material_experiments.py
 python3 tools/control_experiments.py
 python3 tools/sensor_history_experiments.py
 python3 tools/load_sample_experiments.py
+python3 tools/clock_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```
@@ -64,7 +65,7 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Next useful experiments
 
-1. On a fixed 960 Hz physical plant and 1/240 s force age, isolate internal controller update, sensor-read and output-hold clocks in the four bounded comparisons described in current decisions. The default 120 Hz chain and mass-event normalization now reproduce exactly under physical refinement. Preserve the failed original 10% hypothesis; review the intended sampled/continuous target separately before changing its interpretation or any gains.
+1. Clock experiments are finished. Review the specific sampled-production versus whole-loop rate-insensitivity/continuous-limit target described in current decisions when the user is awake. Preserve the original failed 10% hypothesis until that interpretation is explicitly reviewed; do not select another controller patch without an agreed target and demonstrated mechanism.
 2. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
 3. Add target-rate feedforward for continuously moving aim: current circle tracking lags by ~13°. Distinguish path tracking from absolute altitude hold; the latter is not the declared aim semantic. Keep legacy/off/P-only comparisons and the failed universal height-loss hypothesis visible.
 4. Extend material mass bookkeeping and spanwise graph geometry/load mapping, then test large skin loss, critical spar hits and secondary detached-piece fracture. Explicit named material removal now updates the current component and accounts for removed parcels; automatic geometric damage-to-material mapping and full structural materialization remain pending. Current generalized graph statics are not calibrated local beam stresses.
@@ -73,4 +74,4 @@ The headless path uses only GCC supporting C++20, GNU make and Python's standard
 
 ## Blockers
 
-No known build/test blocker. PR #2–#6 post-merge main workflows passed; this iteration must observe its own PR and post-merge workflows. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.
+No known build/test blocker. PR #2–#7 post-merge main workflows passed; this iteration must observe its own PR and post-merge workflows. The mechanics/Instructor revision passed all remote Actions steps; follow-up heads need their own observed result. The gh GraphQL PR-status call was forbidden; GitHub connector reads provide the remote workflow/status evidence instead. Cloud has no graphical display, so interactive human handling cannot be established here. The upstream APEX PowerShell package validator needs `pwsh` and the official `skill-creator` package; neither is installed, and neither is required to run this core. Historical aircraft data, detailed material calibration and full v0.1 acceptance remain project work, not completed claims.
