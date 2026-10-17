@@ -60,7 +60,8 @@ void row(std::ostream &out, const Simulation &s) {
   Vec h = total_angular_momentum(s.body, s.mass, s.def.engine);
   out << ',' << h.x << ',' << h.y << ',' << h.z;
   out << ',' << s.def.engine.tip_mach << ',' << s.def.engine.induction_residual
-      << ',' << s.def.engine.induction_converged;
+      << ',' << s.def.engine.induction_converged
+      << ',' << s.instructor.aim_heading_rate;
   out << '\n';
 }
 void debug(const Simulation &s, const std::string &prefix) {
@@ -89,7 +90,7 @@ int main(int argc, char **argv) {
       std::cerr
           << "usage: flight-run AIRFRAME SCENARIO OUTPUT_PREFIX [hz=120] "
              "[seconds=10] [controller=flightpath|flightpath-p|legacy|off] "
-             "[bank_deg=40]\n";
+             "[bank_deg=40] [aim_hz=0] [aim_rate_ff=1] [aim_rate_tau=0.15]\n";
       return 2;
     }
     std::string scenario = argv[2], prefix = argv[3];
@@ -133,6 +134,18 @@ int main(int argc, char **argv) {
       if (!std::isfinite(bank) || bank < 5 || bank > 75)
         throw std::runtime_error("invalid bank limit");
       s.guidance.max_bank = rad(bank);
+    }
+    double aim_hz = argc > 8 ? std::stod(argv[8]) : 0;
+    double aim_rate_ff = argc > 9 ? std::stod(argv[9]) : 1;
+    if (!std::isfinite(aim_hz) || aim_hz < 0 || aim_hz > hz ||
+        (aim_rate_ff != 0 && aim_rate_ff != 1))
+      throw std::runtime_error("invalid aim sampling or feedforward switch");
+    s.guidance.aim_rate_feedforward = aim_rate_ff != 0;
+    if (argc > 10) {
+      double tau = std::stod(argv[10]);
+      if (!std::isfinite(tau) || tau <= 0)
+        throw std::runtime_error("invalid aim rate filter time");
+      s.guidance.aim_rate_time_constant = tau;
     }
     auto trim = s.trim(
         scenario == "highspeed_pull" || scenario == "highspeed_weakened" ? 140
@@ -190,7 +203,7 @@ int main(int argc, char **argv) {
            "prop_torque,induced,rotor_ledger_valid,mechanical_energy,engine_"
            "work,external_work,"
            "prop_loss,angular_impulse_x,angular_impulse_y,angular_impulse_z,Hx,"
-           "Hy,Hz,prop_tip_mach,induction_residual,induction_converged\n";
+           "Hy,Hz,prop_tip_mach,induction_residual,induction_converged,aim_heading_rate\n";
     bool damaged = false;
     p.mouse = scenario == "mouse" || scenario == "mixed" ||
               scenario == "compensate" || scenario == "weakened_pull" ||
@@ -254,8 +267,11 @@ int main(int argc, char **argv) {
         s.disconnect("elevator");
         damaged = true;
       }
-      if (scenario == "mouse_circle" || scenario == "mouse_circle_damaged")
-        p.aim_world = {std::cos(.08 * time), std::sin(.08 * time), 0};
+      if (scenario == "mouse_circle" || scenario == "mouse_circle_damaged") {
+        // Optional render/input cadence study; physics still uses its fixed dt.
+        double sample_time = aim_hz > 0 ? std::floor(time * aim_hz + 1e-9) / aim_hz : time;
+        p.aim_world = {std::cos(.08 * sample_time), std::sin(.08 * sample_time), 0};
+      }
       if (scenario == "mouse_climb")
         p.aim_world = {std::cos(rad(8)), 0, -std::sin(rad(8))};
       if (scenario == "mouse" || scenario == "mouse_damaged" ||

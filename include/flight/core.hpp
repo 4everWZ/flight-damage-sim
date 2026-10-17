@@ -69,12 +69,18 @@ struct AxisOwnership {
 enum class InstructorMode { Off, Legacy, FlightPath };
 struct GuidanceParameters {
   bool rate_integral = true;
+  bool aim_rate_feedforward = true;
+  double aim_rate_time_constant = .15;
   double max_bank = rad(40), heading_gain = .35, path_gain = .6,
          normal_gain = .5;
 };
 struct InstructorState {
   Vec aim_body{}, desired_rates{};
   double desired_bank = 0, desired_normal_g = 1, flight_path_error = 0;
+  // World-heading history, independent of aircraft rotation. Invalidated when
+  // mouse/FlightPath guidance is inactive or the aim has no horizontal heading.
+  double previous_aim_heading = 0, aim_heading_rate = 0;
+  bool aim_history_valid = false;
   std::array<bool, 3> saturated{};
   std::array<double, 3> rate_bias{};
   std::array<bool, 3> integral_paused{};

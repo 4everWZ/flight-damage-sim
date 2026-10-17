@@ -356,6 +356,31 @@ void Simulation::update_controls(const PilotIntent &p) {
   Vec vb = body.attitude.conjugate().rotate(body.velocity - wind_world);
   double speed = std::max(norm(vb), 15.), alpha = std::atan2(vb.z, vb.x),
          beta = std::atan2(vb.y, std::hypot(vb.x, vb.z));
+  Vec aim = unit(p.aim_world);
+  double desired_heading = std::atan2(aim.y, aim.x);
+  if (p.mouse && instructor_mode == InstructorMode::FlightPath &&
+      guidance.aim_rate_feedforward && std::hypot(aim.x, aim.y) > 1e-6) {
+    if (instructor.aim_history_valid) {
+      double delta = std::atan2(
+          std::sin(desired_heading - instructor.previous_aim_heading),
+          std::cos(desired_heading - instructor.previous_aim_heading));
+      // A filtered difference follows moving aim without requiring a permanent
+      // heading error. Filter before limiting: render-rate sample/hold input
+      // otherwise loses most of its rate at each short simulation tick.
+      double decay = std::exp(-dt / guidance.aim_rate_time_constant);
+      double ceiling = gravity / speed *
+                       std::tan(clamp(guidance.max_bank, 0., rad(75)));
+      instructor.aim_heading_rate = clamp(
+          decay * instructor.aim_heading_rate + (1 - decay) * delta / dt,
+          -ceiling, ceiling);
+    } else
+      instructor.aim_heading_rate = 0;
+    instructor.previous_aim_heading = desired_heading;
+    instructor.aim_history_valid = true;
+  } else {
+    instructor.aim_history_valid = false;
+    instructor.aim_heading_rate = 0;
+  }
   if (instructor_mode == InstructorMode::Legacy) {
     instructor.desired_bank = clamp(1.2 * heading_error, -rad(65), rad(65));
     instructor.desired_rates = {
@@ -367,16 +392,15 @@ void Simulation::update_controls(const PilotIntent &p) {
   } else if (instructor_mode == InstructorMode::FlightPath) {
     // Aim is an air-relative flight-path direction in world coordinates, not a
     // nose attitude or altitude target.
-    Vec air_world = body.velocity - wind_world, aim = unit(p.aim_world);
-    double heading = std::atan2(air_world.y, air_world.x),
-           desired_heading = std::atan2(aim.y, aim.x);
+    Vec air_world = body.velocity - wind_world;
+    double heading = std::atan2(air_world.y, air_world.x);
     double path =
         std::atan2(-air_world.z, std::hypot(air_world.x, air_world.y));
     double desired_path = std::atan2(-aim.z, std::hypot(aim.x, aim.y));
     double error = std::atan2(std::sin(desired_heading - heading),
                               std::cos(desired_heading - heading));
     instructor.flight_path_error = desired_path - path;
-    double heading_rate = guidance.heading_gain * error;
+    double heading_rate = instructor.aim_heading_rate + guidance.heading_gain * error;
     instructor.desired_bank = clamp(std::atan(speed * heading_rate / gravity),
                                     -guidance.max_bank, guidance.max_bank);
     double bank_support = std::max(std::cos(bank), .3);

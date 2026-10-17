@@ -30,6 +30,7 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
             << ',' << p.trim[1] << ',' << p.trim[2] << "],\"desired_rates\":";
   vec(s.instructor.desired_rates);
   std::cout << ",\"desired_bank\":" << s.instructor.desired_bank
+            << ",\"aim_heading_rate\":" << s.instructor.aim_heading_rate
             << ",\"desired_normal_g\":" << s.instructor.desired_normal_g
             << ",\"path_error\":" << s.instructor.flight_path_error
             << ",\"aero_force\":";

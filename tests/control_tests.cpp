@@ -12,11 +12,107 @@ void hold_guidance(Simulation &s) {
   s.guidance.path_gain = 0;
   s.guidance.normal_gain = 0;
 }
+void moving_aim(const Definition &d) {
+  // Prescribed sensor bench: verify the rate observer against a continuous
+  // rotating direction (including atan2 wrap), independently of flight dynamics.
+  for (double hz : {120., 240.})
+    for (double sign : {-1., 1.}) {
+      Simulation s(d, 1 / hz);
+      PilotIntent p;
+      p.mouse = true;
+      for (int i = 0; i <= int(2 * hz); ++i) {
+        double heading = sign * (3 + .08 * i / hz);
+        p.aim_world = {std::cos(heading), std::sin(heading), 0};
+        s.body.velocity = p.aim_world * 70;
+        s.update_controls(p);
+        double expected = sign * .08 * (1 - std::exp(-i / (hz * s.guidance.aim_rate_time_constant)));
+        require(std::abs(s.instructor.aim_heading_rate - expected) < 2e-13,
+                "constant rotating aim matches analytic filtered rate across wrap");
+        require(std::abs(s.instructor.desired_bank -
+                         std::atan(70 * expected / gravity)) < 2e-12,
+                "zero heading error still requests the coordinated turn rate");
+      }
+      auto bias = s.instructor.rate_bias[Roll];
+      p.active[Roll] = true;
+      p.direct[Roll] = -1;
+      s.update_controls(p);
+      require(s.ownership[Roll].command == -1 &&
+                  s.ownership[Roll].direct_weight == 1 &&
+                  s.ownership[Pitch].direct_weight == 0 &&
+                  s.ownership[Yaw].direct_weight == 0 &&
+                  s.instructor.rate_bias[Roll] == bias,
+              "moving aim cannot dilute direct-axis authority or unfreeze its PI");
+      p.active[Roll] = false;
+      s.update_controls(p);
+      require(s.ownership[Roll].command == -1,
+              "moving aim release retains initial command continuity");
+      for (int i = 0; i <= int(d.handoff * hz); ++i)
+        s.update_controls(p);
+      require(s.ownership[Roll].direct_weight == 0,
+              "moving aim handoff ends at configured duration");
+      for (int reason = 0; reason < 5; ++reason) {
+        auto reset = s;
+        if (reason == 0) p.mouse = false;
+        if (reason == 1) reset.instructor_mode = InstructorMode::Off;
+        if (reason == 2) reset.instructor_mode = InstructorMode::Legacy;
+        if (reason == 3) reset.guidance.aim_rate_feedforward = false;
+        if (reason == 4) p.aim_world = {0, 0, -1};
+        reset.update_controls(p);
+        require(!reset.instructor.aim_history_valid &&
+                    reset.instructor.aim_heading_rate == 0,
+                "inactive guidance and vertical aim invalidate rate history");
+        p.mouse = true;
+        p.aim_world = {0, 1, 0};
+        reset.instructor_mode = InstructorMode::FlightPath;
+        reset.guidance.aim_rate_feedforward = true;
+        reset.update_controls(p);
+        require(reset.instructor.aim_heading_rate == 0,
+                "reactivation does not differentiate a stale aim");
+      }
+    }
+  Simulation jump(d);
+  PilotIntent p;
+  p.mouse = true;
+  jump.update_controls(p);
+  p.aim_world = {0, 1, 0};
+  jump.update_controls(p);
+  double ceiling = gravity / 70 * std::tan(jump.guidance.max_bank);
+  require(std::abs(jump.instructor.aim_heading_rate) <= ceiling &&
+              std::abs(jump.instructor.desired_bank) <= jump.guidance.max_bank,
+          "an aim jump cannot charge unbounded feedforward memory");
+  double before = jump.instructor.aim_heading_rate;
+  for (int i = 0; i < 120; ++i) jump.update_controls(p);
+  require(std::abs(jump.instructor.aim_heading_rate - before * std::exp(-1 / jump.guidance.aim_rate_time_constant)) < 1e-14,
+          "held aim rate decays in physical time");
+
+  // Actual 6DoF counterfactual: guidance must not move an aircraft differently
+  // when every pilot linkage is disconnected. No body state is prescribed here.
+  Simulation on(d);
+  p = on.trim(70, 1000).intent;
+  auto off = on;
+  off.guidance.aim_rate_feedforward = false;
+  for (const auto &c : d.chains) {
+    on.disconnect(c.name);
+    off.disconnect(c.name);
+  }
+  p.mouse = true;
+  for (int i = 0; i < 180; ++i) {
+    double heading = .08 * i * on.dt;
+    p.aim_world = {std::cos(heading), std::sin(heading), 0};
+    on.step(p);
+    off.step(p);
+    require(norm(on.body.position - off.body.position) < 1e-12 &&
+                norm(on.body.velocity - off.body.velocity) < 1e-12 &&
+                norm(on.body.omega - off.body.omega) < 1e-12,
+            "rate feedforward cannot bypass disconnected surfaces in flight");
+  }
+}
 int main(int argc, char **argv) {
   try {
     if (argc != 2)
       throw std::runtime_error("airframe required");
     auto d = Definition::load(argv[1]);
+    moving_aim(d);
     const std::array<double, 3> kp{.9, 1.4, 1.}, ki{.8, 1.2, .5};
     double worst = 0, spread = 0;
     for (int axis = 0; axis < 3; ++axis)
