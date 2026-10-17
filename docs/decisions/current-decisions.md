@@ -583,6 +583,18 @@ At 2° the new intact fixture has lift ≈6493.26 N, induced drag ≈53.06 N and
 
 PR #9's original negative-capability evidence remains available at head `5a49d59`, with passing PR/push CI. This follow-up stays in PR #10 on `feature/lifting-line-reference`; no additional stacked PR or semantic production merge is needed. Outputs are `results/lifting-line-{summary.json,loads.csv}` and `results/section-transfer-{summary.json,strips.csv}`, retained by the focused CI job as `lifting-line-reference-evidence`. Numerical verification supports this declared linear reference and transfer, not historical airplane validity. Original production/acceptance code and the failed 10% hypothesis remain unchanged.
 
+## Incremental build configuration and the libstdc++ ABI
+
+The [PR #12 review finding](https://github.com/4everWZ/flight-damage-sim/pull/12#discussion_r4303470420) is confirmed on main `ecbd27e` with GCC 14.2.0. After a normal `make -j2`, `make CPPFLAGS='-Iinclude -D_GLIBCXX_DEBUG' build/finite-span-probe` compiled only the new consumer: neither shared core object was rebuilt. The probe returned 1 with `std::bad_alloc`. Cleaning and running the same debug build succeeded, producing all 36 data rows. Default CI exercised one configuration and did not establish incremental cross-configuration correctness. This was an omission in the shared-object optimization.
+
+The [GCC debug-mode contract](https://gcc.gnu.org/onlinedocs/libstdc++/manual/debug_mode_using.html) explains why: the macro changes standard-container layouts, and container-bearing data crosses the core/consumer translation-unit boundary. A successful link does not establish ABI compatibility.
+
+The correction compares effective `CXX`, `CPPFLAGS` and `CXXFLAGS` as shell-quoted, NUL-separated data. A missing or changed ignored settings record becomes a phony prerequisite for both core objects and requested executables. Otherwise the record is left untouched. Existing executable paths/default flags remain; both objects compile once per configuration, without a clean between supported setting changes. Python is not introduced into the normal C++ build.
+
+`python3 tests/build_config_tests.py` builds real sources/fixtures in temporary trees. It checks new debug consumers after a base build, existing executables switching back, debug mode through `CXXFLAGS`, quoted `CPPFLAGS`, compiler-command changes, unchanged-build reuse, query mode and read-only dry-run. A small real `Definition` consumer reports its compiled mode/markers and reads container-bearing core data; the original finite-span probe also runs in each configuration. The regression uses `-O0 -g0` to bound cost; the standard optimized default is checked separately. No simulator source, aircraft data, force law or acceptance threshold changes.
+
+With the original default `-O2 -g` settings, corrected debug and return-to-default probes both succeed; their CSV output equals the clean debug control. Existing `make -j2 test` passes, retaining the original false 10% hypothesis. The parallel `build-config` CI job retains `build-config-summary.json` with actual settings/observed modes. Local reproduction output remains in ignored `results/build-config-before.json`.
+
 ## How decisions change
 
 Record a testable hypothesis, actual result, uncertainty and useful next experiment. Routine reversible implementation choices can proceed; any choice removing or weakening a core requirement must be reported first. Preserve failed evidence when it changes interpretation. Do not turn partial mechanisms, stubs or a rendered aircraft into a claim of full v0.1 completion.
