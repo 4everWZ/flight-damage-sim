@@ -70,7 +70,6 @@ enum class InstructorMode { Off, Legacy, FlightPath };
 struct GuidanceParameters {
   bool rate_integral = true;
   bool aim_rate_feedforward = true;
-  double aim_rate_time_constant = .15;
   double max_bank = rad(40), heading_gain = .35, path_gain = .6,
          normal_gain = .5;
 };

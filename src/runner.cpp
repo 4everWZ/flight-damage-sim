@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
       std::cerr
           << "usage: flight-run AIRFRAME SCENARIO OUTPUT_PREFIX [hz=120] "
              "[seconds=10] [controller=flightpath|flightpath-p|legacy|off] "
-             "[bank_deg=40] [aim_hz=0] [aim_rate_ff=1] [aim_rate_tau=0.15]\n";
+             "[bank_deg=40] [aim_hz=0] [aim_rate_ff=1]\n";
       return 2;
     }
     std::string scenario = argv[2], prefix = argv[3];
@@ -141,12 +141,6 @@ int main(int argc, char **argv) {
         (aim_rate_ff != 0 && aim_rate_ff != 1))
       throw std::runtime_error("invalid aim sampling or feedforward switch");
     s.guidance.aim_rate_feedforward = aim_rate_ff != 0;
-    if (argc > 10) {
-      double tau = std::stod(argv[10]);
-      if (!std::isfinite(tau) || tau <= 0)
-        throw std::runtime_error("invalid aim rate filter time");
-      s.guidance.aim_rate_time_constant = tau;
-    }
     auto trim = s.trim(
         scenario == "highspeed_pull" || scenario == "highspeed_weakened" ? 140
                                                                          : 70,

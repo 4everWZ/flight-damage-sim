@@ -12,6 +12,45 @@ void hold_guidance(Simulation &s) {
   s.guidance.path_gain = 0;
   s.guidance.normal_gain = 0;
 }
+void path_load_projection(const Definition &d) {
+  // Controlled sensor states, not prescribed flight motion. A balanced total
+  // force must produce zero path-normal error regardless of body/flow axes or
+  // how the same force is divided between airframe and propeller.
+  for (double yaw : {-1., 0., 1.})
+    for (double pitch : {-.2, .2})
+      for (double bank : {-.4, 0., .4})
+        for (double path : {-.1, 0., .1}) {
+          Simulation s(d);
+          s.body.attitude = Quat::axis({0, 0, 1}, yaw) *
+                            Quat::axis({0, 1, 0}, pitch) *
+                            Quat::axis({1, 0, 0}, bank);
+          s.wind_world = {2, -3, 1};
+          PilotIntent p;
+          p.mouse = true;
+          p.aim_world = {std::cos(path) * std::cos(yaw),
+                         std::cos(path) * std::sin(yaw), -std::sin(path)};
+          s.body.velocity = s.wind_world + p.aim_world * 70;
+          double weight = s.mass.mass * gravity;
+          s.propulsion.force = {weight * .1, weight * .03, -weight * .02};
+          s.aero.force = s.body.attitude.conjugate().rotate({0, 0, -weight}) -
+                         s.propulsion.force;
+          s.load_factor = -s.aero.force.z / weight;
+          s.update_controls(p);
+          require(std::abs(s.instructor.desired_normal_g - s.load_factor) < 1e-12,
+                  "force-balanced flight has no fictitious normal-load deficit");
+        }
+  Simulation trimmed(d);
+  auto tr = trimmed.trim(70, 1000);
+  require(tr.converged, "path-loop regression requires actual trimmed entry");
+  auto p = tr.intent;
+  p.mouse = true;
+  p.aim_world = unit(trimmed.body.velocity - trimmed.wind_world);
+  trimmed.update_controls(p);
+  // Trim may include a small bank for propeller asymmetry; the separate
+  // coordination-rate request need not vanish. Its NORMAL-LOAD error must.
+  require(std::abs(trimmed.instructor.desired_normal_g - trimmed.load_factor) < 1e-9,
+          "actual force-balanced trim has no fictitious normal-load deficit");
+}
 void moving_aim(const Definition &d) {
   // Prescribed sensor bench: verify the rate observer against a continuous
   // rotating direction (including atan2 wrap), independently of flight dynamics.
@@ -25,7 +64,7 @@ void moving_aim(const Definition &d) {
         p.aim_world = {std::cos(heading), std::sin(heading), 0};
         s.body.velocity = p.aim_world * 70;
         s.update_controls(p);
-        double expected = sign * .08 * (1 - std::exp(-i / (hz * s.guidance.aim_rate_time_constant)));
+        double expected = sign * .08 * (1 - std::exp(-i / (hz * .15)));
         require(std::abs(s.instructor.aim_heading_rate - expected) < 2e-13,
                 "constant rotating aim matches analytic filtered rate across wrap");
         require(std::abs(s.instructor.desired_bank -
@@ -82,7 +121,7 @@ void moving_aim(const Definition &d) {
           "an aim jump cannot charge unbounded feedforward memory");
   double before = jump.instructor.aim_heading_rate;
   for (int i = 0; i < 120; ++i) jump.update_controls(p);
-  require(std::abs(jump.instructor.aim_heading_rate - before * std::exp(-1 / jump.guidance.aim_rate_time_constant)) < 1e-14,
+  require(std::abs(jump.instructor.aim_heading_rate - before * std::exp(-1 / .15)) < 1e-14,
           "held aim rate decays in physical time");
 
   // Actual 6DoF counterfactual: guidance must not move an aircraft differently
@@ -112,6 +151,7 @@ int main(int argc, char **argv) {
     if (argc != 2)
       throw std::runtime_error("airframe required");
     auto d = Definition::load(argv[1]);
+    path_load_projection(d);
     moving_aim(d);
     const std::array<double, 3> kp{.9, 1.4, 1.}, ki{.8, 1.2, .5};
     double worst = 0, spread = 0;

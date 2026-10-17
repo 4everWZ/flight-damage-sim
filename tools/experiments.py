@@ -9,11 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT/'results'
 SCENARIOS = ['clean','roll','pull','mouse','mixed','aero_damage','symmetric_damage','control_damage','compensate','structure','weakened_pull','highspeed_pull','highspeed_weakened','stall']
 
-def run(scenario, hz=120, seconds=10, suffix='',controller='flightpath',bank=40,airframe='validation.airframe',aim_hz=0,aim_rate_ff=True,aim_rate_tau=None):
+def run(scenario, hz=120, seconds=10, suffix='',controller='flightpath',bank=40,airframe='validation.airframe',aim_hz=0,aim_rate_ff=True):
     prefix = RESULTS/(scenario+suffix)
     args = [str(ROOT/'build'/'flight-run'), str(ROOT/'data'/airframe), scenario, str(prefix), str(hz), str(seconds),controller,str(bank),str(aim_hz),str(int(aim_rate_ff))]
-    if aim_rate_tau is not None:
-        args.append(str(aim_rate_tau))
     completed = subprocess.run(args, check=True, capture_output=True, text=True)
     records = [{k:float(v) for k,v in row.items()} for row in csv.DictReader((prefix.with_suffix('.csv')).open())]
     return records, completed.stdout.strip()

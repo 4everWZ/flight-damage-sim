@@ -367,7 +367,8 @@ void Simulation::update_controls(const PilotIntent &p) {
       // A filtered difference follows moving aim without requiring a permanent
       // heading error. Filter before limiting: render-rate sample/hold input
       // otherwise loses most of its rate at each short simulation tick.
-      double decay = std::exp(-dt / guidance.aim_rate_time_constant);
+      constexpr double filter_time = .15;
+      double decay = std::exp(-dt / filter_time);
       double ceiling = gravity / speed *
                        std::tan(clamp(guidance.max_bank, 0., rad(75)));
       instructor.aim_heading_rate = clamp(
@@ -403,11 +404,21 @@ void Simulation::update_controls(const PilotIntent &p) {
     double heading_rate = instructor.aim_heading_rate + guidance.heading_gain * error;
     instructor.desired_bank = clamp(std::atan(speed * heading_rate / gravity),
                                     -guidance.max_bank, guidance.max_bank);
-    double bank_support = std::max(std::cos(bank), .3);
+    // The sensor remains aero body-Z/weight. Convert the path-normal request
+    // into that same quantity, accounting for attitude and the other force
+    // components. A force-balanced pitched aircraft does not measure 1 on
+    // body Z, and propeller normal force must not be requested twice.
+    Vec normal_world{-std::sin(path) * std::cos(heading),
+                     -std::sin(path) * std::sin(heading), -std::cos(path)};
+    Vec normal_body = body.attitude.conjugate().rotate(normal_world);
+    Vec force = aero.force + propulsion.force;
+    double weight = mass.mass * gravity;
+    double other_support = (force.x * normal_body.x + force.y * normal_body.y) / weight;
+    double bank_support = std::max(-normal_body.z, .3);
     instructor.desired_normal_g =
         clamp((std::cos(path) + speed * guidance.path_gain *
-                                    instructor.flight_path_error / gravity) /
-                  bank_support,
+                                    instructor.flight_path_error / gravity - other_support) /
+                  bank_support + propulsion.force.z / weight,
               -.5, 5.);
     // A normal-load loop requests body rate; the actuator and damaged
     // aerodynamics must supply it.

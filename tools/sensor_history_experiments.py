@@ -85,7 +85,7 @@ def main():
               'locked_120hz_fresh_sensor_and_controller': locked,
               'observations': observations,
               'time_contract': {
-                  'sensor': 'Source pre-step body plus actual available load sample; zero-order held on exact integer ticks.',
+                  'sensor': 'Complete controller_loads_v3 inputs: pre-step body, current mass, aerodynamic/propeller vector-force caches and aerodynamic body-Z load factor; zero-order held on exact integer ticks. Scalar-only old histories are rejected, not reconstructed.',
                   'controller': 'Requests are emitted at the left boundary and held over the output interval; stored PI biases are compared at common right boundaries.',
                   'actuator': 'End states compare at common 1/120 s right boundaries. Applied values are the current interval midpoint; the prior endpoint force rule is retained as a numerical ablation.',
                   'norms': 'L1 columns integrate the per-time maximum absolute channel error. Local area errors sum per-1/120 s maximum surface-position time-integral error against the exact held-target zero-lag rate ramp.',
