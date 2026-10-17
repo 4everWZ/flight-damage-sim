@@ -43,7 +43,7 @@ def analyze(raw, trace_path):
               'mass_event_samples':event,
               'diagnostic_observation':{'120_240_difference_m':effects['240']['adjacent_effect_difference_m'],
                                         'fraction_of_120hz_effect':effects['240']['adjacent_effect_difference_m']/effects['120']['effect_norm_m']},
-              'contract':'Controller/request clock 120 Hz. At t, reconstruct raw body-normal aerodynamic force at t-1/240 s from completed physical midpoint samples, then divide by CURRENT mass*gravity. Exact samples are preserved; finer grids use linear interpolation of past available brackets. Initial prehistory extends the trim cache as a constant. No off-tick force evaluation and no plant pose writes.',
+              'contract':'Controller/request clock 120 Hz. At t, reconstruct raw aerodynamic and propeller body-force vectors at t-1/240 s from completed physical midpoint samples; normalize the aerodynamic body-Z load and projection contributions by CURRENT mass*gravity. Exact samples are preserved; finer grids linearly interpolate past brackets for every component. Initial prehistory extends the trim caches as constants. No off-tick force evaluation and no plant pose writes.',
               'limits':'This is an independent diagnostic. It does not modify production physics/control/sensor timing or the original native 10% acceptance hypothesis in control-summary.json. Linear force reconstruction and one synthetic material-removal maneuver do not establish universal closed-loop fidelity.'}
     return report
 

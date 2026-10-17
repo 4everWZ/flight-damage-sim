@@ -20,6 +20,8 @@ template <class Chain> double applied_sample(const Chain &chain) {
 struct Sample {
   Body body;
   double load = 0, rho = 0;
+  double current_mass = 0;
+  Vec aero_force{}, prop_force{};
   PilotIntent p;
   Axis3 command{}, bias{}, weight{};
   std::array<bool, 3> paused{};
@@ -50,6 +52,9 @@ History record(const Definition &d, int hz, bool removed) {
     Sample a;
     a.body = s.body;
     a.load = s.load_factor;
+    a.current_mass = s.mass.mass;
+    a.aero_force = s.aero.force;
+    a.prop_force = s.propulsion.force;
     a.rho = 1.225 * std::exp(s.body.position.z / 8500.);
     a.p = p;
     s.step(p);
@@ -86,6 +91,9 @@ Controls control(const History &h, int sensor_hz, int controller_hz) {
     auto src = h.samples[held];
     s.body = src.body;
     s.load_factor = src.load;
+    s.mass.mass = src.current_mass;
+    s.aero.force = src.aero_force;
+    s.propulsion.force = src.prop_force;
     s.density = src.rho;
     auto p = h.samples[tick].p;
     s.update_controls(p);
@@ -292,6 +300,9 @@ Body locked_controller(const Definition &d, int plant_hz, bool removed) {
       plant.evaluate(plant.body, true);
       controller.body = plant.body;
       controller.load_factor = plant.load_factor;
+      controller.mass.mass = plant.mass.mass;
+      controller.aero.force = plant.aero.force;
+      controller.propulsion.force = plant.propulsion.force;
       controller.density = 1.225 * std::exp(plant.body.position.z / 8500.);
       p.active[Roll] = i >= plant_hz && i < 2 * plant_hz;
       p.direct[Roll] = 1;
@@ -314,32 +325,36 @@ Body locked_controller(const Definition &d, int plant_hz, bool removed) {
 struct ForceSample {
   long long tick;
   double fz;
+  Vec aero{}, prop{};
 };
 struct LoadRead {
   double fz;
   long long left, right;
   bool prehistory = false;
+  Vec aero{}, prop{};
 };
 LoadRead delayed(const std::vector<ForceSample> &samples, long long target,
-                 double initial) {
+                 double initial, Vec initial_aero = {}, Vec initial_prop = {}) {
   if (target < 0)
-    return {initial, target, target, true};
+    return {initial, target, target, true, initial_aero, initial_prop};
   auto it = std::lower_bound(samples.begin(), samples.end(), target,
                              [](auto &a, long long t) { return a.tick < t; });
   if (it == samples.end())
     throw std::runtime_error("future/unbracketed force requested");
   if (it->tick == target)
-    return {it->fz, it->tick, it->tick, false};
+    return {it->fz, it->tick, it->tick, false, it->aero, it->prop};
   if (it == samples.begin())
     throw std::runtime_error("missing older force bracket");
   auto lo = it - 1;
   double w = double(target - lo->tick) / (it->tick - lo->tick);
-  return {lo->fz * (1 - w) + it->fz * w, lo->tick, it->tick, false};
+  return {lo->fz * (1 - w) + it->fz * w, lo->tick, it->tick, false,
+          lo->aero * (1 - w) + it->aero * w,
+          lo->prop * (1 - w) + it->prop * w};
 }
 struct AgedRun {
   Body body;
   double pos = 0, vel = 0, rates = 0, att = 0, g = 0, command = 0, bias = 0,
-         weight = 0, end = 0, applied = 0;
+         weight = 0, end = 0, applied = 0, force_sensor = 0;
   int pauses = 0;
   double max_span = 0, event_mass_before = 0, event_mass_after = 0,
          event_force_change = 0, event_g_error = 0;
@@ -362,6 +377,7 @@ AgedRun aged_loop(const Definition &d, int hz, int removed,
   p.mouse = true;
   p.aim_world = {1, .3, 0};
   double initial = plant.aero.force.z;
+  Vec initial_aero = plant.aero.force, initial_prop = plant.propulsion.force;
   std::vector<ForceSample> samples;
   Axis3 request{};
   AgedRun r;
@@ -377,13 +393,16 @@ AgedRun aged_loop(const Definition &d, int hz, int removed,
     }
     if (i % (hz / 120) == 0) {
       long long target = 2LL * i - hz / 120;
-      auto read = delayed(samples, target, initial);
+      auto read = delayed(samples, target, initial, initial_aero, initial_prop);
       if (read.right >= 2LL * i)
         throw std::runtime_error("noncausal read");
       double normal = -read.fz / (plant.mass.mass * gravity);
       r.max_span = std::max(r.max_span, (read.right - read.left) / (2. * hz));
       controller.body = plant.body;
       controller.load_factor = normal;
+      controller.mass.mass = plant.mass.mass;
+      controller.aero.force = read.aero;
+      controller.propulsion.force = read.prop;
       controller.density = 1.225 * std::exp(plant.body.position.z / 8500.);
       p.active[Roll] = i >= hz && i < 2 * hz;
       p.direct[Roll] = 1;
@@ -392,6 +411,9 @@ AgedRun aged_loop(const Definition &d, int hz, int removed,
         request[a] = controller.ownership[a].command;
       if (reference) {
         const auto &s = reference->samples[i];
+        r.force_sensor = std::max({r.force_sensor,
+                                  norm(controller.aero.force - s.aero_force),
+                                  norm(controller.propulsion.force - s.prop_force)});
         compare_body(plant.body, s.body, r);
         r.g = std::max(r.g, std::abs(normal - s.load));
         r.command = std::max(r.command, maxdiff(request, s.command));
@@ -414,7 +436,8 @@ AgedRun aged_loop(const Definition &d, int hz, int removed,
     held.active = {true, true, true};
     held.direct = request;
     plant.step(held);
-    samples.push_back({2LL * i + 1, plant.aero.force.z});
+    samples.push_back({2LL * i + 1, plant.aero.force.z, plant.aero.force,
+                       plant.propulsion.force});
     for (const auto &node : plant.def.nodes)
       if (!node.attached)
         throw std::runtime_error("aged-loop fixture changed control topology");
@@ -433,13 +456,20 @@ AgedRun aged_loop(const Definition &d, int hz, int removed,
   if (reference) {
     compare_body(r.body, reference->final, r);
     if (std::max({r.pos, r.vel, r.rates, r.att, r.g, r.command, r.bias,
-                  r.weight, r.end, r.applied}) > 1e-10 ||
+                  r.weight, r.end, r.applied, r.force_sensor}) > 1e-10 ||
         r.pauses)
       throw std::runtime_error("fixed-age loop lost native 120 Hz identity");
   }
   return r;
 }
 void verify_delayed_samples() {
+  const std::vector<ForceSample> vectors{
+      {1, -10, {2, 3, -10}, {1, -2, 4}},
+      {3, -30, {6, 9, -30}, {3, -6, 12}}};
+  auto mid = delayed(vectors, 2, 0);
+  if (norm(mid.aero - Vec{4, 6, -20}) != 0 ||
+      norm(mid.prop - Vec{2, -4, 8}) != 0)
+    throw std::runtime_error("vector force age reconstruction failed");
   const std::vector<ForceSample> samples{{1, -10}, {3, -30}, {5, -50}};
   for (auto pair : {std::pair<long long, double>{1, -10},
                     {2, -20},
@@ -516,7 +546,7 @@ struct ClockRun {
 };
 void require_identity(const AgedRun &r, const char *message) {
   if (std::max({r.pos, r.vel, r.rates, r.att, r.g, r.command, r.bias, r.weight,
-                r.end, r.applied}) > 1e-10 ||
+                r.end, r.applied, r.force_sensor}) > 1e-10 ||
       r.pauses)
     throw std::runtime_error(message);
 }
@@ -533,9 +563,10 @@ ClockRun clock_loop(const Definition &d, const ClockConfig &cfg, int removed,
   p.mouse = true;
   p.aim_world = {1, .3, 0};
   double initial = plant.aero.force.z;
+  Vec initial_aero = plant.aero.force, initial_prop = plant.propulsion.force;
   // The initial cache is known at t=0, in addition to the declared constant
   // prehistory. A fast sensor with the long age explicitly reads this anchor.
-  std::vector<ForceSample> samples{{0, initial}};
+  std::vector<ForceSample> samples{{0, initial, initial_aero, initial_prop}};
   SensorPacket packet;
   Axis3 applied{}, before{}, error{};
   ClockRun out;
@@ -552,7 +583,7 @@ ClockRun clock_loop(const Definition &d, const ClockConfig &cfg, int removed,
       packet.density = 1.225 * std::exp(plant.body.position.z / 8500.);
       packet.tick = i;
       packet.force_tick = 2LL * i - cfg.force_age_ticks;
-      packet.read = delayed(samples, packet.force_tick, initial);
+      packet.read = delayed(samples, packet.force_tick, initial, initial_aero, initial_prop);
       if (packet.read.right >= 2LL * i)
         throw std::runtime_error("noncausal clocked sensor read");
       packet.fz = packet.read.fz;
@@ -564,6 +595,9 @@ ClockRun clock_loop(const Definition &d, const ClockConfig &cfg, int removed,
       controller.body = packet.body;
       controller.density = packet.density;
       controller.load_factor = normal;
+      controller.mass.mass = plant.mass.mass;
+      controller.aero.force = packet.read.aero;
+      controller.propulsion.force = packet.read.prop;
       p.active[Roll] = i >= hz && i < 2 * hz;
       p.direct[Roll] = 1;
       controller.update_controls(p);
@@ -615,6 +649,9 @@ ClockRun clock_loop(const Definition &d, const ClockConfig &cfg, int removed,
     }
     if (native) {
       const auto &s = native->samples[i];
+      r.force_sensor = std::max({r.force_sensor,
+                                norm(controller.aero.force - s.aero_force),
+                                norm(controller.propulsion.force - s.prop_force)});
       compare_body(plant.body, s.body, r);
       r.g = std::max(r.g, std::abs(normal - s.load));
       r.command = std::max(r.command, maxdiff(applied, s.command));
@@ -631,7 +668,8 @@ ClockRun clock_loop(const Definition &d, const ClockConfig &cfg, int removed,
     held.active = {true, true, true};
     held.direct = applied;
     plant.step(held);
-    samples.push_back({2LL * i + 1, plant.aero.force.z});
+    samples.push_back({2LL * i + 1, plant.aero.force.z, plant.aero.force,
+                       plant.propulsion.force});
     for (const auto &node : plant.def.nodes)
       if (!node.attached)
         throw std::runtime_error(
@@ -741,13 +779,16 @@ void write_history(const History &h, const std::string &path) {
   std::ofstream o(path);
   if (!o)
     throw std::runtime_error("cannot write history");
-  o << "surface_samples_v2 " << std::setprecision(17) << h.hz << ' '
+  o << "controller_loads_v3 " << std::setprecision(17) << h.hz << ' '
     << h.samples.size() << ' ' << h.initial.chains.size() << '\n';
   for (auto &c : h.initial.chains)
     o << c.deflection << ' ' << c.filtered << '\n';
   for (const auto &a : h.samples) {
     write_body(o, a.body);
     o << a.load << ' ' << a.rho << ' ';
+    o << a.current_mass << ' ';
+    for (auto v : {a.aero_force, a.prop_force})
+      o << v.x << ' ' << v.y << ' ' << v.z << ' ';
     for (double v : a.p.trim)
       o << v << ' ';
     o << a.p.throttle << ' ' << a.p.prop_rpm_ratio << ' ';
@@ -773,11 +814,9 @@ History read_history(const Definition &d, const std::string &path) {
   size_t count = 0, chains = 0;
   std::string version;
   in >> version;
-  bool midpoint_format = version == "surface_samples_v2";
-  if (midpoint_format)
-    in >> h.hz;
-  else
-    h.hz = std::stoi(version); // Earlier frozen baseline applied endpoints.
+  if (version != "controller_loads_v3")
+    throw std::runtime_error("history lacks mass/vector loads: preserve it and record a new v3 prefix");
+  in >> h.hz;
   in >> count >> chains;
   if ((h.hz != 120 && h.hz != 960) || count != size_t(5 * h.hz) ||
       chains != d.chains.size())
@@ -793,6 +832,9 @@ History read_history(const Definition &d, const std::string &path) {
     Sample a;
     read_body(in, a.body);
     in >> a.load >> a.rho;
+    in >> a.current_mass;
+    for (auto *v : {&a.aero_force, &a.prop_force})
+      in >> v->x >> v->y >> v->z;
     for (double &v : a.p.trim)
       in >> v;
     in >> a.p.throttle >> a.p.prop_rpm_ratio;
@@ -813,14 +855,11 @@ History read_history(const Definition &d, const std::string &path) {
       in >> v;
       a.surfaces.push_back(v);
     }
-    if (midpoint_format) {
-      for (size_t j = 0; j < chains; ++j) {
-        double v;
-        in >> v;
-        a.applied.push_back(v);
-      }
-    } else
-      a.applied = a.surfaces;
+    for (size_t j = 0; j < chains; ++j) {
+      double v;
+      in >> v;
+      a.applied.push_back(v);
+    }
     h.samples.push_back(a);
   }
   read_body(in, h.final);

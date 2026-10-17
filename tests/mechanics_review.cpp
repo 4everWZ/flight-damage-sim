@@ -265,7 +265,13 @@ int main(int argc, char **argv) {
           coordinated.instructor.rate_bias[Roll] - initial_bias);
     Simulation level(fixture);
     level.body.attitude = Quat::axis({0, 1, 0}, rad(10));
-    level.load_factor = 1;
+    // Force-balanced sensors: body Z alone is cos(pitch), not 1g. Split a
+    // nonzero normal propeller contribution from the aerodynamic sensor too.
+    double weight = level.mass.mass * gravity;
+    level.propulsion.force = {weight * .1, 0, -weight * .02};
+    level.aero.force = level.body.attitude.conjugate().rotate({0, 0, -weight}) -
+                       level.propulsion.force;
+    level.load_factor = -level.aero.force.z / weight;
     aim = {};
     aim.mouse = true;
     level.update_controls(aim);

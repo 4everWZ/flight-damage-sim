@@ -13,6 +13,7 @@ Requires C++20 GCC, GNU make and Python 3:
 ```sh
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
+python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, actual flight and sampled input
 python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
 python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
 python3 tools/detachment_experiments.py  # owned-cell piece flight and control partition

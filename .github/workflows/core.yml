@@ -2,10 +2,29 @@ name: Core experiments
 on:
   pull_request:
   push:
-    branches: [main, 'feature/**']
+    branches: [main]
 permissions:
   contents: read
 jobs:
+  moving-aim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Actual flight tracking, input cadence and feedforward ablation
+        run: python3 tools/aim_tracking_experiments.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aim-tracking-evidence
+          path: |
+            results/aim-tracking-summary.json
+            results/mouse_circle_aim_validation-material_feedback.csv
+            results/mouse_circle_aim_validation-material_continuous.csv
+            results/mouse_circle_aim_validation-material_sample30.csv
+          if-no-files-found: error
   lifting-line-reference:
     runs-on: ubuntu-latest
     timeout-minutes: 2

@@ -1,6 +1,6 @@
 # Current decisions and evidence status
 
-Updated: 2026-10-16. Core, Instructor and signed-propulsion iterations are on main; this is not full v0.1 acceptance.
+Updated: 2026-10-17. Core, Instructor and signed-propulsion iterations are on main; this is not full v0.1 acceptance.
 
 ## Authority and provenance
 
@@ -95,6 +95,37 @@ Normal-load feedback, gravity/turn-rate kinematics and rate PI generate normaliz
 A disconnected elevator still loses ~247 m by 10 s and reaches the reference ground plane at ~22 s; it cannot be restored by PI bias. No collision model exists, so later raw telemetry is a mathematical continuation below that reference plane, not validated post-impact flight. An 8° climb request ends around 3.64° and 50.18 m/s after 30 s with ~5.34 s pitch saturation: current power/angle/control limits prevent full tracking.
 
 The broader hypothesis that every turn has less minimum height loss **failed**. In a 60 s continuously rotating horizontal aim (0.08 rad/s), legacy climbs ~13.87 m, while new PI initially descends ~8.10 m and finishes ~5.05 m down. New flight-path error RMS after 20 s is ~0.068° versus ~0.218° legacy, with heading lag ~13.19° versus ~29.61°. This supports improved direction/path tracking, not universal altitude preservation. The failed hypothesis stays in generated `instructor-summary.json`; original requirements were not rewritten to make it pass.
+
+### Moving-heading tracking and consistent normal-load feedback
+
+The next production control iteration starts after the diagnostic PRs #9/#10 merged. Two mechanisms are changed in the owned C++ Instructor; no aircraft polar, cell-force law, structure, control-chain damage semantics or rigid-body integrator changes.
+
+**Moving aim:** the previous horizontal guidance requested only `heading_gain*heading_error`. Following a constant heading rate therefore requires `error=rate/heading_gain`: 0.08/0.35 predicts **13.096°**. The actual pre-change 60 s legacy-prop flight had **13.188°** heading RMS after 20 s. A wrapped difference of world aim headings now supplies a filtered rate (0.15 s exponential filter), added before the existing bank-request limit. The stored rate is bounded by the same guidance bank ceiling; this does not certify available aerodynamic authority. Filtering precedes limiting so 30/60 Hz sample-and-hold inputs are not discarded at short physics ticks. Inactive mouse/FlightPath guidance and vertical aim invalidate history; reactivation starts without a stale derivative. Keyboard ownership, handoff, PI guards and the common real actuator path remain authoritative.
+
+**Rejected first route:** feedforward alone reduced heading RMS to 0.094° / 0.160° on the legacy/BEM fixtures, but BEM path-angle RMS was **0.1527°**, failing the retained **0.15°** guard. The first implementation commit and local first-attempt result retain that failure. Trying 0.5 s / 1 s filtering did not fix it (BEM path RMS **0.15314° / 0.15337°**); no slower-filter tuning is adopted and the temporary parameter is removed.
+
+**Normal-load mechanism:** the existing sensor is aerodynamic **body-Z force divided by weight**, not total force normal to the flight path. The old `1/cos(bank)` conversion ignored body pitch/flow angle and propeller support. On actual force-balanced BEM trim it still generated a roughly **0.00555 rad/s** pitch request. With unit upward path normal `n` expressed in body axes, total cached force `F=Faero+Fprop`, weight `W`, and `k=max(-n.z,0.3)`, the consistent body-Z aerodynamic target is
+
+`N_aero_target = [cos(gamma) + V*path_gain*(gamma_aim-gamma) - (F.x*n.x+F.y*n.y)/W]/k + Fprop.z/W`.
+
+The same −0.5…5 target bounds and existing rate/actuator/AoA limits follow it. The measured `load_factor` keeps its old definition. No extra force evaluation, synthetic torque or attitude update is introduced: guidance consumes the existing cached force samples. A banked trim can still request a small coordinated body rate while leveling; force balance implies zero **normal-load error**, not universally zero total body-rate request.
+
+The corrected normal feedback and moving-rate ablation give the following **real 60 s flights**, using the same 0.08 rad/s horizontal path. RMS is measured against the common continuous intent after 20 s; sampled inputs include their actual delay.
+
+| Synthetic fixture | Corrected loads, rate FF off: heading RMS | Rate FF on: heading RMS | Rate FF on: path RMS | 30 Hz input: heading RMS | Local wing loss, 30 Hz: heading RMS |
+|---|---:|---:|---:|---:|---:|
+| Legacy propeller | 13.185° | 0.090° | 0.0574° | 0.161° | 0.383° |
+| Signed BEM/material | 13.243° | 0.149° | 0.0804° | 0.220° | 0.459° |
+
+All sampled-input comparisons remain below 1° heading RMS; these turns have no stalled cells or structural failure. For the same 30 Hz input, 120→240 Hz changes final altitude by **0.00632 / 0.00538 m** and heading by **0.000461 / 0.000245 rad**. Switching rate FF alone leaves each corrected fixed-aim flight identical. This does **not** mean the normal-load correction leaves the old stationary-aim trajectory unchanged. Original core/Instructor acceptance checks are retained separately.
+
+Altitude is not held: corrected continuous turns end **12.15 / 13.86 m lower**, versus **11.82 / 13.37 m lower** with rate FF disabled in the same corrected controller. Peak loads with FF are about **1.224 / 1.223 G**. The earlier universal height-loss hypothesis remains false; no free maneuver, universal recovery, historical handling or human GUI acceptance is claimed.
+
+Regression evidence uses the actual update/flight paths: the rotating-angle observer follows its analytic exponential response across ±π; reset/vertical-input cases clear it; full direct-axis ownership and initial handoff continuity hold. With every pilot linkage disconnected, enabling FF produces the same actual 6DoF trajectory. Controlled force-balanced attitude/wind/propeller-split cases and actual trim have zero normal-load deficit (the trim check uses <1e−9); the existing flat-bank nose-versus-path test still demands zero pitch request.
+
+The new projection reads cached vector loads and current mass, so controller-history records now explicitly include those inputs as **`controller_loads_v3`**. Replay never invents missing forces from old scalar G: old histories are rejected with instructions to preserve them and record a new prefix. Full force vectors use the existing causal force-age reconstruction and current-mass normalization; native identity bounds and original clock/convergence thresholds are unchanged. Previous clock numbers below describe the earlier controller. They are not relabeled as current-controller results or used to claim the original 10% failure is repaired.
+
+Reproduce with `python3 tools/aim_tracking_experiments.py`. It writes `aim-tracking-summary.json` plus real runner CSVs; CI has a parallel `moving-aim` job and retains representative default-fixture traces. The scenario runner accepts optional `[aim_hz=0] [aim_rate_ff=1]` after the bank limit, allowing the same physics/input-cadence and feedforward ablations. Existing `PilotIntent` aim-direction semantics are unchanged; vertical aim-rate feedforward is not implemented. For a new complete-input history without overwriting older traces, use `python3 tools/sensor_history_experiments.py --history-prefix results/path-projection-history --output-prefix results/path-projection-history`.
 
 ## Legacy propulsion bench (retained counterexamples)
 
