@@ -6,6 +6,21 @@ on:
 permissions:
   contents: read
 jobs:
+  build-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Incremental configuration switches through real core ABI
+        run: python3 tests/build_config_tests.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-config-evidence
+          path: results/build-config-summary.json
+          if-no-files-found: error
   moving-aim:
     runs-on: ubuntu-latest
     timeout-minutes: 6

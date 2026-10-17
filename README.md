@@ -33,6 +33,13 @@ python3 tools/control_transition_reference.py  # held-input fault timing; contin
 
 This builds and runs core assertions plus flight/control/damage/structure scenarios, identical replay and 120/240 Hz comparisons. CSV/JSON results are written under ignored `results/`. The core has no renderer or Python dependency.
 
+GNU make records effective `CXX`, `CPPFLAGS` and `CXXFLAGS` values under ignored
+`build/.compile-config`. Changed settings rebuild both shared objects and
+requested executables, including when switching back; unchanged builds remain
+incremental. The build uses the existing POSIX command environment (including
+`printf`, `cmp` and `mv`). Run `python3 tests/build_config_tests.py` for isolated,
+real-core configuration-switch regressions. Python is not needed for make alone.
+
 An optional Matplotlib engineering viewer displays attitude, local cell forces, missing skin, actual controls, axis ownership and structural utilization:
 
 ```sh
