@@ -6,6 +6,28 @@ on:
 permissions:
   contents: read
 jobs:
+  damaged-coupling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Actual damaged handoff and sustained structural loads
+        run: |
+          make -j2 build/damaged-handoff-probe
+          mkdir -p results
+          build/damaged-handoff-probe data/validation-material.airframe results/damaged-handoff-traces.csv > results/damaged-handoff-summary.csv
+          python3 tools/sustained_load_experiments.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: damaged-coupling-evidence
+          path: |
+            results/damaged-handoff-*.csv
+            results/sustained-load-*.csv
+            results/sustained-load-summary.json
+          if-no-files-found: error
   build-config:
     runs-on: ubuntu-latest
     timeout-minutes: 5
