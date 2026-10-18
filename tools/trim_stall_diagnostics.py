@@ -122,7 +122,7 @@ def summarize():
         'sources': [
             {'url': 'https://www.grc.nasa.gov/www/k-12/VirtualAero/BottleRocket/airplane/alr.html', 'use': 'Low-angle lift imbalance and torque direction; not post-stall calibration.'},
             {'url': 'https://www.nasa.gov/news-release/nasa-dryden-flight-research-center-news-room-news-releases-active-aeroelastic-wing-completes-first-phase-of-flight-tests/', 'use': 'AAW release 03-25 describes aeroelastic reversal through pressure-driven wing twist. Frozen/zero-elastic diagnostics here do not establish that mechanism.'},
-            {'url': 'https://ntrs.nasa.gov/api/citations/19830002803/downloads/19830002803.pdf#page=10', 'use': 'NASA differential-aileron wind-tunnel report printed p.8/PDF10: apparent high-angle reversal attributed to asymmetric stall, warning against misidentifying it as true reversal. Different swept research model; no values imported.'}],
+            {'url': 'https://ntrs.nasa.gov/api/citations/19830002803/downloads/19830002803.pdf#page=11', 'use': 'NASA differential-aileron wind-tunnel report printed p.9/PDF11: apparent high-angle reversal attributed to asymmetric stall, warning against misidentifying it as true reversal. Different swept research model; no values imported.'}],
         'next_choice': 'No established sign/interpolation implementation bug was found. Quantitative separation/aileron behavior or larger pitch authority needs separately surfaced aerodynamic/control/geometry assumptions; do not hide negative gain, increase authority or rewrite post-stall data as a bug fix.'}
     (OUT/'trim-stall-summary.json').write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps({'lookup_checks': result['lookup_checks'], 'independent_pair': result['independent_pair'],
