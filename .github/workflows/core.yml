@@ -136,6 +136,7 @@ jobs:
           name: control-evidence
           path: |
             results/control-summary.json
+            results/lagged-control-summary.json
             results/control-sensitivity.csv
             results/sensitivity-isolation.txt
             results/sensor-history-summary.json

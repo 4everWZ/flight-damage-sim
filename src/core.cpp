@@ -124,6 +124,46 @@ double trimmed_command(double axis_command, double trim, bool enabled) {
                    (enabled ? trim * (1 - std::abs(axis_command)) : 0),
                -1, 1);
 }
+double follow_lagged_target(double position, double filtered, double target,
+                            double rate, double lag, double elapsed) {
+  // Continuous rate-limited tracking of the existing exponential target.
+  // A reversal can catch the surface inside this tick, then send it back the
+  // other way. Clamping only against the target at the endpoint misses that
+  // turn and introduces a first-order angle error.
+  if (rate <= 0 || elapsed <= 0)
+    return position;
+  auto at = [&](double t) {
+    return filtered + (target - filtered) * (-std::expm1(-t / lag));
+  };
+  if (position == filtered && std::abs(target - filtered) / lag <= rate)
+    return at(elapsed); // Following; exponential speed only decreases.
+  double direction = filtered > position ? 1 : -1;
+  if (position == filtered)
+    direction = target > filtered ? 1 : -1;
+  double velocity = direction * rate;
+  auto gap = [&](double t) {
+    return direction * (at(t) - position - velocity * t);
+  };
+  if (gap(elapsed) >= 0)
+    return position + velocity * elapsed;
+  double lo = 0, hi = elapsed;
+  // If initially coincident but the target outruns the surface, skip the
+  // trivial t=0 root. The signed gap has just one maximum before the catch.
+  double initial_speed = direction * (target - filtered) / lag;
+  if (initial_speed > rate)
+    lo = std::min(elapsed, lag * std::log(initial_speed / rate));
+  for (int i = 0; i < 48; ++i) {
+    double mid = (lo + hi) * .5;
+    if (gap(mid) > 0)
+      lo = mid;
+    else
+      hi = mid;
+  }
+  double caught = (lo + hi) * .5, angle = at(caught);
+  // A monotone exponential permits at most two catches: a direction reversal
+  // followed by slowing enough to track. No additional actuator state is used.
+  return follow_lagged_target(angle, angle, target, rate, lag, elapsed - caught);
+}
 void advance_surface(ControlChain &c, double command, double q,
                      double elapsed) {
   if (c.jammed) {
@@ -131,13 +171,17 @@ void advance_surface(ControlChain &c, double command, double q,
     return;
   }
   double target = c.connected ? command * c.limit * clamp(c.range, 0, 1) : 0;
-  if (c.lag > 0)
-    c.filtered += (target - c.filtered) * (1 - std::exp(-elapsed / c.lag));
-  else
-    c.filtered = target;
   double effort = 1 / (1 + q / c.q_limit);
-  double travel = c.slew * effort * elapsed / (1 + std::max(c.friction, 0.));
-  c.deflection += clamp(c.filtered * effort - c.deflection, -travel, travel);
+  double rate = c.slew * effort / (1 + std::max(c.friction, 0.));
+  if (c.lag > 0) {
+    c.deflection = follow_lagged_target(c.deflection, c.filtered * effort,
+                                       target * effort, rate, c.lag, elapsed);
+    c.filtered += (target - c.filtered) * (-std::expm1(-elapsed / c.lag));
+  } else {
+    c.filtered = target;
+    c.deflection += clamp(c.filtered * effort - c.deflection,
+                          -rate * elapsed, rate * elapsed);
+  }
 }
 void sample_surface(ControlChain &c, double command, double q, double elapsed) {
   // Both samples start from the same actual linkage state. Advancing twice by
