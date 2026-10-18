@@ -17,7 +17,7 @@ ifneq ($(BUILD_CONFIG_CHANGED),)
 endif
 
 .PHONY: all test clean
-all: build/surface-sampling-tests build/sensor-history-probe build/aerodynamics-tests build/sensitivity-probe build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe
+all: build/surface-sampling-tests build/sensor-history-probe build/aerodynamics-tests build/sensitivity-probe build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe build/lagged-control-tests
 
 build:
 	mkdir -p build
@@ -87,6 +87,9 @@ build/control-transition-probe: $(CORE_DEPS) tests/control_transition_probe.cpp 
 build/build-config-probe: $(CORE_DEPS) tests/build_config_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/build_config_probe.cpp -o $@
 
+build/lagged-control-tests: $(CORE_DEPS) tests/lagged_control_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/lagged_control_tests.cpp -o $@
+
 test: all
 	./build/surface-sampling-tests data/validation-material.airframe
 	./build/aerodynamics-tests data/validation-material.airframe
@@ -96,6 +99,8 @@ test: all
 	./build/detachment-tests data/validation-bem.airframe
 	./build/material-tests data/validation-material.airframe data/validation-bem.airframe
 	./build/control-tests data/validation-material.airframe
+	mkdir -p results
+	./build/lagged-control-tests data/validation-material.airframe results/lagged-control-summary.json
 
 clean:
 	rm -rf build
