@@ -201,6 +201,7 @@ struct DetachedBody {
       chains; // Local unpowered/jammed surfaces; no pilot link.
   Wrench aero{};
 };
+enum class TrimMode { Level, FixedThrottle };
 struct TrimResult {
   PilotIntent intent;
   double alpha = 0, bank = 0, residual = 0;
@@ -208,6 +209,11 @@ struct TrimResult {
   double rotor_acceleration = 0;
   bool converged = false;
   int iterations = 0;
+  // Positive climb angle in the air mass. Level retains its legacy entry
+  // construction; FixedThrottle prescribes TAS and adds constant world wind.
+  double flight_path = 0;
+  TrimMode mode = TrimMode::Level;
+  double propeller_pitch_rate = 0;
 };
 class Simulation {
 public:
@@ -237,10 +243,14 @@ public:
   void remove_material(const std::string &name, double remaining_fraction);
   void disconnect(const std::string &chain);
   TrimResult trim(double speed, double altitude);
+  TrimResult trim_fixed_throttle(double true_airspeed, double altitude,
+                                 double throttle, double prop_rpm_ratio = 1);
   void reset_trim(const TrimResult &trim, double speed, double altitude);
   std::vector<double> node_bending, node_torsion;
 
 private:
+  TrimResult trim_condition(double speed, double altitude, bool fixed_throttle,
+                            double throttle, double prop_rpm_ratio);
   Wrench evaluate_forces(const Body &, bool store, bool midpoint_controls);
   Wrench evaluate_airframe(const Body &, double wake, bool store,
                            bool midpoint_controls = false);
