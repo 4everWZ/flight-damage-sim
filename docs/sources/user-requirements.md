@@ -50,3 +50,9 @@ Received in the project request on 2026-10-14. Quoted verbatim:
 ## Specification provenance
 
 The preserved [FlightLab v0.1 specification](../spec/flight-sim-core-v0.1.original.md) comes from the [assistant response requested by the user](https://chatgpt.com/c/8c79d2da-f148-8328-b951-93766a55c0cd?messageId=83e5c30d-f0ce-4700-9449-9095619ddfbc). It is an assistant-authored engineering proposal. Recovery removed only the surrounding chat introduction, closing commentary, and writing wrapper; the 51-section specification body is unchanged. The original document's status label does not imply that its implementation or physical accuracy has been verified.
+
+## Priority clarification, 2026-10-18
+
+The user asked whether the reported structural parameters were based on actual material physics, then clarified: “抓大放小，可以先参考二战经典战斗机，比如bf109 spitfire 系列”. Their follow-up permits weapon/performance parameter tables and rejects building an entire physically complete world as a prerequisite. Aircraft core components, flight controls/aerodynamics, damage-driven functional degradation and coupling, and high-speed/overload breakup remain central; the preceding spar tests are examples, not the complete damage scope.
+
+Use specific reference variants and keep measured/reference-informed/assumed values distinguishable. This direction does not require full finite-element analysis or historical certification, and does not authorize HP, direct attitude changes or scripted overspeed separation. Existing synthetic fixtures remain explicit engineering tests rather than silently becoming a historical aircraft. PR14-specific merge approval applies only to PR14; PR15 remains draft unless separately authorized.
