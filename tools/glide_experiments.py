@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fixed-throttle equilibria and real transient flights; synthetic capability only."""
+"""Fixed-throttle equilibria and dynamic simulated flights; synthetic capability only."""
 import csv
 import json
 import math

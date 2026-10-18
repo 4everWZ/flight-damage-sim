@@ -4,6 +4,8 @@ A renderer-free C++20 prototype for WWII-style propeller-aircraft flight, mixed 
 
 The first synthetic fixture has 152 aerodynamic cells, 6 structural nodes with front/rear/skin load paths, and independent damaged control chains. Mouse aim and keyboard requests reach actual control surfaces; forces and moments drive 6DoF motion at 120 Hz with distributed airframe loads evaluated at the solved body midpoint. Structural section/stiffness and load exposure cause redistribution and delayed failure. Separation follows graph disconnection and updates mass, CG and inertia.
 
+All flight experiments in this repository are dynamic simulated flights, not real-world flight tests.
+
 This is a measured first slice, **not completed v0.1 or a historically validated aircraft**. No HP, direct attitude control or scripted wing destruction substitutes for physics. Known limits include reduced structural statics/material law, frozen detached geometry, uncalibrated blade/engine data and basic Instructor guidance.
 
 ## Run
@@ -13,8 +15,9 @@ Requires C++20 GCC, GNU make and Python 3:
 ```sh
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
-python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, actual flight and sampled input
-python3 tools/glide_experiments.py  # fixed-throttle glide equilibrium, real damaged transients and separate static-flow diagnostics
+python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, dynamic simulated flight and sampled input
+python3 tools/trim_stall_diagnostics.py  # independent table/roll checks, pitch envelope and dynamic simulated flights
+python3 tools/glide_experiments.py  # fixed-throttle glide equilibrium, dynamic simulated damaged transients and separate static-flow diagnostics
 python3 tools/cell_frame_experiments.py  # opt-in cell bases, identity compatibility and synthetic canted-cell flights
 python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
 python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
