@@ -6,6 +6,9 @@ Run with pypdf installed in an isolated environment. Downloads/results are ignor
 """
 import json
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from urllib.request import urlopen
 from pypdf import PdfReader
@@ -13,6 +16,21 @@ from pypdf import PdfReader
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT/'results/spitfire-source'
 REPORTS = {'L334': '19930092582', 'L353': '19930092581'}
+
+
+def ocr_review(pdf, name):
+    """Second reading of ambiguous configuration/table scans, never auto-adopted."""
+    for tool in ('pdftoppm', 'tesseract'):
+        if not shutil.which(tool):
+            raise RuntimeError(f'OCR review needs the preinstalled {tool} executable')
+    for page in ({'L334': (3, 4), 'L353': (5, 9)}[name]):
+        prefix = DEST/f'{name}-page-{page}'
+        subprocess.run(['pdftoppm', '-f', str(page), '-l', str(page),
+                        '-scale-to', '3000', '-singlefile', '-png', str(pdf), str(prefix)], check=True)
+        result = subprocess.run(['tesseract', str(prefix)+'.png', 'stdout', '--psm', '6'],
+                                check=True, capture_output=True, text=True)
+        (DEST/f'{name}-page-{page}-ocr.txt').write_text(result.stdout)
+        print(f'\n=== {name} SCAN OCR PDF PAGE {page} (not visual verification) ===\n{result.stdout}')
 
 
 def main():
@@ -43,6 +61,8 @@ def main():
         print(readable[:160000])
         if index[name]['text_characters'] < 3000:
             raise RuntimeError(f'{name}: insufficient embedded text; OCR/visual reading is still required')
+        if '--ocr-review' in sys.argv:
+            ocr_review(pdf, name)
     (DEST/'index.json').write_text(json.dumps(index, indent=2)+'\n')
     print(json.dumps(index, indent=2))
 

@@ -17,7 +17,7 @@ jobs:
         run: |
           python3 -m venv build/reference-venv
           build/reference-venv/bin/python -m pip install pypdf==6.0.0
-          build/reference-venv/bin/python tools/extract_spitfire_sources.py
+          build/reference-venv/bin/python tools/extract_spitfire_sources.py --ocr-review
       - uses: actions/upload-artifact@v4
         if: always()
         with:
