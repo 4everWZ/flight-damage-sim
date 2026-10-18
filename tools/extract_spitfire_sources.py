@@ -5,6 +5,7 @@ Research preparation only; no simulator or aircraft-profile imports this file.
 Run with pypdf installed in an isolated environment. Downloads/results are ignored.
 """
 import json
+import re
 from pathlib import Path
 from urllib.request import urlopen
 from pypdf import PdfReader
@@ -36,7 +37,10 @@ def main():
                        'text_characters': sum(len(p['text']) for p in pages)}
         # Printed source is a public US-government report. Expose substantive
         # text for review; page figures/tables still require visual verification.
-        print(text[:120000])
+        # PDF layout extraction has huge inter-character padding. Keep the raw
+        # artifact, but make complete prose pages available in review logs.
+        readable = '\n'.join(re.sub(r'[ \t]+', ' ', line).strip() for line in text.splitlines())
+        print(readable[:160000])
         if index[name]['text_characters'] < 3000:
             raise RuntimeError(f'{name}: insufficient embedded text; OCR/visual reading is still required')
     (DEST/'index.json').write_text(json.dumps(index, indent=2)+'\n')
