@@ -2,7 +2,8 @@
 """Fetch the two public NACA source reports and expose page-indexed source text.
 
 Research preparation only; no simulator or aircraft-profile imports this file.
-Run with pypdf installed in an isolated environment. Downloads/results are ignored.
+Run with pypdf in an isolated environment; optional OCR also uses PyMuPDF.
+Downloads/results are ignored.
 """
 import json
 import base64
@@ -36,7 +37,7 @@ def ocr_review(pdf, name):
             print(f'\n=== {name} SCAN OCR PDF PAGE {number} (not visual verification) ===\n{text}')
             if '--log-review-images' in sys.argv and (name, number) in (('L334', 4), ('L353', 9)):
                 # Public source scans for clients whose log API transports text
-                # but cannot download binary artifacts. No image is generated.
+                # but cannot download binary artifacts. Render original content.
                 png = page.get_pixmap(dpi=120, colorspace=pymupdf.csGRAY).tobytes('png')
                 print(f'REVIEW_SCAN {name} {number} '+base64.b64encode(png).decode())
 

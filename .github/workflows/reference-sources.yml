@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - tools/extract_spitfire_sources.py
+      - tools/spitfire_reference_summary.py
       - data/spitfire-va-naca-reference.json
       - .github/workflows/reference-sources.yml
 permissions:
@@ -16,11 +17,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Convert the separate proposal without simulator imports
+        run: python3 tools/spitfire_reference_summary.py
       - name: Isolated public NACA report extraction and scan cross-reading
         run: |
           python3 -m venv build/reference-venv
           build/reference-venv/bin/python -m pip install pypdf==6.0.0 pymupdf==1.26.6
-          build/reference-venv/bin/python tools/extract_spitfire_sources.py --ocr-review --log-review-images
+          build/reference-venv/bin/python tools/extract_spitfire_sources.py --ocr-review
       - uses: actions/upload-artifact@v4
         if: always()
         with:

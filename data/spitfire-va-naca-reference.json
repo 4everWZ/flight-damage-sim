@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "status": "proposal; source extraction only; not a runnable aircraft or adopted production data",
+  "profile_id": "spitfire-va-naca-1941-42",
+  "aircraft": "Supermarine Spitfire VA, NACA Langley test installation",
+  "source_reading": "Original NASA PDFs: embedded prose OCR read; independent scan OCR used for ambiguous text. L334 printed p.2/PDF4 and L353 printed p.7/PDF9 scans directly visually reviewed. No flight-curve digitization or original-data uncertainty estimate is claimed.",
+  "sources": {
+    "L334": {
+      "title": "Measurements of the Flying Qualities of a Supermarine Spitfire VA Airplane",
+      "date": "1942-09",
+      "url": "https://ntrs.nasa.gov/api/citations/19930092582/downloads/19930092582.pdf",
+      "pdf_pages": 53,
+      "pagination": "Printed prose page n is NASA PDF page n+2; introduction is unnumbered printed page 1. Figures require their own PDF-page citation."
+    },
+    "L353": {
+      "title": "Stalling Characteristics of the Supermarine Spitfire VA Airplane",
+      "date": "1942-09",
+      "url": "https://ntrs.nasa.gov/api/citations/19930092581/downloads/19930092581.pdf",
+      "pdf_pages": 29,
+      "pagination": "Printed prose page n is NASA PDF page n+2."
+    }
+  },
+  "configuration": {
+    "serial": "W3119",
+    "identity_source": {"report": "L334", "printed_page": 1, "pdf_page": 3, "location": "General specifications; serial resolved by independent scan OCR"},
+    "test_dates": ["1941-12-30", "1942-01-29"],
+    "test_dates_source": {"report": "L334", "printed_page": 1, "pdf_page": 3, "location": "Introduction"},
+    "weight_geometry_source": {"report": "L334", "printed_page": 2, "pdf_page": 4, "location": "General specifications, unnumbered list"},
+    "test_weight_lb": 6184,
+    "empty_weight_lb": 4960,
+    "normal_gross_weight_lb": 6237,
+    "wing_area_ft2": 242,
+    "span_ft_in": [36, 11],
+    "mean_aerodynamic_chord_in": 85,
+    "reported_aspect_ratio": 5.62,
+    "reported_normal_gross_power_loading_lb_hp": 4.78,
+    "power_loading_caution": "The report does not identify the power denominator of 4.78; it differs from normal gross weight divided by the separately listed ratings. Preserve this source value without using it to infer a different engine power.",
+    "reported_wing": {
+      "root_airfoil": "NACA 2212",
+      "tip_airfoil": "NACA 2208",
+      "planform": "elliptical",
+      "leading_edge_dihedral_deg": 6.0,
+      "root_incidence_from_thrust_axis_deg": 2.1,
+      "tip_incidence_from_thrust_axis_deg": 0.0,
+      "note": "Quoted from this report's configuration list, not supplemented from later-variant handbooks. Airfoil names alone do not supply measured section polars or section geometry tolerances."
+    },
+    "flaps": {"type": "partial-span split", "reported_travel_deg": 85, "reported_total_area_ft2": 15.6, "reported_span_ft_in": [17, 10]},
+    "cg": {
+      "reported_percent_mac": 31.4,
+      "behind_root_leading_edge_in": 31.4,
+      "mac_leading_edge_behind_root_leading_edge_in": 4.8,
+      "source": {"report": "L334", "printed_page": 5, "pdf_page": 7, "location": "Tests, results, and discussion"},
+      "corroboration": {"report": "L353", "printed_page": 2, "pdf_page": 4, "location": "Apparatus and tests"},
+      "caution": "Both CG/MAC statements are approximate. NACA lacked accurate drawings and explicitly warned that computed MAC location might be in error. Do not force rounded inch dimensions to reproduce 31.4% exactly."
+    },
+    "ailerons": {
+      "covering": "metal",
+      "area_each_ft2": 9.45,
+      "balance_area_each_ft2": 2.45,
+      "source": {"report": "L334", "printed_page": 2, "pdf_page": 4, "location": "General specifications: ailerons; covering also stated on printed page 12"}
+    },
+    "engine": {
+      "model": "Rolls-Royce Merlin XLV",
+      "takeoff_rating": {"brake_hp": 1170, "engine_rpm": 3000, "altitude_ft": null},
+      "normal_rating": {"brake_hp": 1200, "engine_rpm": 2850, "altitude_ft": 15500},
+      "maximum_rating": {"brake_hp": 1210, "engine_rpm": 3000, "altitude_ft": 18250},
+      "source": {"report": "L334", "printed_page": 1, "pdf_page": 3, "location": "General specifications: engine ratings"},
+      "caution": "These are reported specification ratings, not measured installed power maps or continuous sea-level power. Normal-rating RPM resolved by independent scan OCR; no power curve is inferred."
+    },
+    "propeller": {
+      "type": "Rotol constant-speed",
+      "blades": 3,
+      "diameter_ft_in": [10, 10],
+      "reported_gear_ratio": 0.477,
+      "source": {"report": "L334", "printed_page": 2, "pdf_page": 4, "location": "General specifications: propeller"},
+      "blade_geometry_and_pitch_limits": null
+    },
+    "trim": {
+      "elevator_tab": true,
+      "rudder_tab": true,
+      "aileron_tab": false,
+      "sources": [
+        {"report": "L334", "printed_page": 12, "pdf_page": 14, "location": "Longitudinal trimming device"},
+        {"report": "L334", "printed_page": 18, "pdf_page": 20, "location": "Rudder and aileron trimming devices"}
+      ]
+    }
+  },
+  "measurement_contract": {
+    "airspeed": "Keep pilot-indicated airspeed, NACA correct indicated airspeed and true airspeed separate. L334 printed pp.4-5 (PDF6-7), airspeed calibration/fig.7; L353 printed p.2 (PDF4), fig.5. Calibration used formation flight with a trailing-head-calibrated reference aircraft. Pilot indication was about 10 mph low near minimum speed and depended on sideslip; no universal +10 mph correction is justified.",
+    "roll_helix": "pb/(2V): p in rad/s, b span, V TRUE airspeed, L334 printed p.13 (PDF15). Body angular rate may need transformation to the reported roll observable; state convention explicitly.",
+    "control_positions": "Recorded near cockpit linkages; L334 printed p.4 (PDF6) reports uncorrected aileron flexibility. Total aileron deflection is the sum of right/left deflection magnitudes, not one surface angle.",
+    "force": "Reported lbf acts at the pilot stick or cable system. Existing normalized commands/actuator torque are different observables; a declared linkage/force mapping is needed before comparing them.",
+    "lift": "Reported CL is a whole-aircraft result in specified powered/configuration conditions. Do not install it as a 2-D cell polar or derive a universal stall AoA. No section-polar, flap, slipstream, downwash or material-law adoption is authorized by this file."
+  },
+  "candidate_targets": [
+    {
+      "id": "gliding-and-powered-stall-table",
+      "source": {"report": "L353", "printed_page": 7, "pdf_page": 9, "location": "Unnumbered maximum-lift table; covered and open gun-port columns visually verified"},
+      "conditions_source": {"report": "L353", "printed_page": 3, "pdf_page": 5, "location": "Unnumbered flight-conditions table"},
+      "reported": [
+        {"condition": "gliding", "gun_ports": "covered", "indicated_stalling_speed_mph": 90, "maximum_CL": 1.18},
+        {"condition": "gliding", "gun_ports": "open", "indicated_stalling_speed_mph": 91, "maximum_CL": 1.15},
+        {"condition": "cruising", "gun_ports": "covered", "indicated_stalling_speed_mph": 77, "maximum_CL": 1.63}
+      ],
+      "conditions": {
+        "shared": {"flaps": "up", "gear": "up", "hood": "closed"},
+        "gliding": {"throttle": "closed", "engine_rpm": null, "radiator_shutter": "closed"},
+        "cruising": {"manifold_pressure_inHg_reported": 36.9, "engine_rpm": 2650, "radiator_shutter": "flush"}
+      },
+      "comparison": "Keep speed label exactly as source: indicated stalling speed, not TAS or an assumed calibrated/equivalent speed. Resolve recorder/cockpit convention and atmosphere before a speed match or lift reconstruction. Powered whole-aircraft CL includes slipstream/trim effects; compare integrated aircraft behavior, not a section CLmax. Ports-open is a source contrast, not a damage law.",
+      "acceptance_tolerance": null,
+      "simulation_result": null
+    },
+    {
+      "id": "full-aileron-roll",
+      "source": {"report": "L334", "printed_page": 13, "pdf_page": 15, "location": "Aileron-control characteristics, prose accompanying figs.25-28"},
+      "reported": {"left_pb_over_2V": 0.09, "right_pb_over_2V": 0.08, "stick_force_lbf": 30, "full_travel_below_airspeed_mph": 110},
+      "conditions": "Metal-covered ailerons, low-speed full travel; report discusses landing and flaps/gear-up level-flight measurements. Exact speed/configuration points require figure digitization before an exact reproduction test.",
+      "comparison": "First compare sign, attainable surface travel and dimensionless roll scale. Keep left/right labels separate from the core sign convention.",
+      "acceptance_tolerance": null,
+      "simulation_result": null
+    },
+    {
+      "id": "high-speed-control-force-limit",
+      "source": {"report": "L334", "printed_pages": [13, 14], "pdf_pages": [15, 16], "location": "Aileron-control characteristics, prose/fig.27"},
+      "reported": {"stick_force_lbf": 40, "airspeed_mph": 300, "available_deflection_fraction": 0.5, "pb_over_2V": 0.04},
+      "conditions": "Source says approximately half available travel at 300 mph. Speed calibration/atmosphere and physical pilot-force/linkage mapping must be resolved for a numerical flight comparison.",
+      "comparison": "Increasing dynamic pressure must reduce attainable actual surface angle for fixed physical pilot force. Do not impose a scripted roll-rate limit.",
+      "acceptance_tolerance": null,
+      "simulation_result": null
+    },
+    {
+      "id": "accelerated-flaps-up-maximum-lift",
+      "sources": [
+        {"report": "L334", "printed_page": 9, "pdf_page": 11, "location": "Elevator control in accelerated flight"},
+        {"report": "L353", "printed_page": 8, "pdf_page": 10, "location": "Stalling characteristics in maneuvers"}
+      ],
+      "reported": {"L334_maximum_CL": 1.21, "L353_maximum_CL": 1.22},
+      "conditions": "Reported accelerated maneuvers from level flight, flaps up. Do not average the two reports into a new measured value or interpret their difference as a statistical uncertainty/tolerance. Gun-port state changes later lateral behavior; preserve that distinction.",
+      "comparison": "Measure whole-aircraft lift and local stall/control response on a separately declared matching configuration, rather than replacing cell CLmax. No fracture load can be inferred: high-speed pull-ups were eased to avoid structural overload (L334 printed p.8/PDF10).",
+      "acceptance_tolerance": null,
+      "simulation_result": null
+    },
+    {
+      "id": "gliding-stall-progression",
+      "source": {"report": "L353", "printed_pages": [4, 5], "pdf_pages": [6, 7], "location": "Gliding condition, prose accompanying figs.8-11"},
+      "conditions": "Throttle closed; flaps/gear up; radiator shutter and hood closed; gun ports covered. Slowly reduce speed with wings initially level and heading held; distinguish held-control and continued-up-elevator tests.",
+      "reported": {"first_root_tuft_reversal_and_buffet_above_minimum_speed_mph_approx": 10, "wider_left_center_section_fluctuation_above_minimum_speed_mph_approx": 6},
+      "comparison": "Root separation/buffet precedes the minimum-speed state, with flow ahead of ailerons remaining attached in these trials and useful lateral control beyond stall. Gun ports open are a different test condition, not generic damage calibration. Buffet frequencies were deliberately not reproduced in report plots; do not extract a natural frequency from them.",
+      "acceptance_tolerance": null,
+      "simulation_result": null
+    }
+  ],
+  "missing_for_production_profile": [
+    "Source-matched installed mass and 3-D component geometry; the report outline dimensions do not determine load-path sections. No interpolation from another variant.",
+    "Mass distribution/full inertia, installed thrust/power versus speed/altitude/setting, blade sections/pitch limits and governor parameters.",
+    "2-D section polars and explicit finite-span/slipstream/downwash/flap/trim-tab models; the named whole-aircraft observations do not supply them.",
+    "Local spar/skin/root geometry and thickness, alloy/temper/product form, EI/GJ/I/J/Z and yield/fracture/fatigue calibration. These flight reports are not structural destruction tests.",
+    "Source-matched full figure coordinates and defensible measurement/comparison tolerances; no historical matching test has run."
+  ]
+}
