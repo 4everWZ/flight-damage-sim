@@ -16,6 +16,8 @@ The lagged/rate-limited reversal repair is integrated; preserve its [baseline an
 
 The user's material-physics question and component-first clarification take priority in the current assessment. The original NASA L334/L353 reports are now extracted and read, including direct scan review of the main configuration and maximum-lift tables: Spitfire Mk Va W3119/Merlin XLV/Rotol, test weight/CG, geometry and candidate control/stall observables; see [material audit and source interpretation](../decisions/current-decisions.md#material-audit-and-component-first-historical-references) and the separate [reference proposal](../../data/spitfire-va-naca-reference.json). The proposal is not a runnable aircraft and no historical comparison has run. Preserve existing synthetic fixtures; declare a matching speed/atmosphere/linkage/configuration before selecting numerical tolerances or changing production data. Bf 109 F-4 stays the second reference. Next implementation remains a bounded local stall/control evidence pass followed by component load-path refinement; do not turn historical-data completeness or full FEA into a gate, and do not change aerodynamic/material semantics before surfacing the concrete choice. Weapons/performance may be tables; core flight/controls, functional damage, high-speed and overload breakup remain priorities.
 
+The [reference-to-input gap investigation](../decisions/current-decisions.md#spitfire-reference-input-mapping-and-current-capability-gap) is now measured: existing-fixture trim flight, actuator pressure response, static local stall flags and a prescribed two-panel geometry counterexample. **No historical numerical performance comparison is currently admissible**; weight/geometry and output-shaft RPM mapping are available, while historical coefficients, atmosphere/airspeed calibration, installed propulsion and force-linkage data are not. The smallest next implementation proposal is optional per-cell undeformed orientation (identity defaults, explicitly composed with incidence/elastic rotations) to represent dihedral/canted surfaces. This is a proposal only; no core/data adoption is made in the diagnostic increment. Keep later sectional/finite-span, stall/force-control semantics and beam/box refinement explicit rather than bundling them into that geometry change.
+
 ### Previous clock investigation, completed on the earlier controller
 
 The final discriminating experiment is complete: keep the physical kernel/actuators/rotor/structure at 960 Hz; independently change internal controller update, sensor read and request output clocks, then close at the native force age. The coarse endpoint matches the previous fixed-age run and the high endpoint reproduces the default native 960 Hz chain exactly. A separate 240 Hz sampled-system cross-check reproduces ~0.12181 m of effect disagreement on identical physical stepping, versus ~0.12418 m in the original native comparison.
@@ -45,6 +47,7 @@ python3 tools/roll_authority_reference.py
 python3 tools/control_fault_reference.py
 python3 tools/control_transition_reference.py
 python3 tools/spitfire_reference_summary.py
+python3 tools/reference_gap_experiments.py
 python3 tools/viewer.py --smoke
 python3 tools/plot_results.py
 ```

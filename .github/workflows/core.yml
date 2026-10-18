@@ -81,6 +81,15 @@ jobs:
         run: python3 tools/control_fault_reference.py
       - name: Fault transition continuity and actuator-time refinement
         run: python3 tools/control_transition_reference.py
+      - name: Reference-input mapping and current synthetic capability
+        run: python3 tools/reference_gap_experiments.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference-gap-evidence
+          path: |
+            results/reference-gap-*.csv
+            results/reference-gap-summary.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: lifting-line-reference-evidence
