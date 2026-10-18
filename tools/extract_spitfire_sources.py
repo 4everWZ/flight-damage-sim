@@ -6,8 +6,6 @@ Run with pypdf installed in an isolated environment. Downloads/results are ignor
 """
 import json
 import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 from urllib.request import urlopen
@@ -20,17 +18,21 @@ REPORTS = {'L334': '19930092582', 'L353': '19930092581'}
 
 def ocr_review(pdf, name):
     """Second reading of ambiguous configuration/table scans, never auto-adopted."""
-    for tool in ('pdftoppm', 'tesseract'):
-        if not shutil.which(tool):
-            raise RuntimeError(f'OCR review needs the preinstalled {tool} executable')
-    for page in ({'L334': (3, 4), 'L353': (5, 9)}[name]):
-        prefix = DEST/f'{name}-page-{page}'
-        subprocess.run(['pdftoppm', '-f', str(page), '-l', str(page),
-                        '-scale-to', '3000', '-singlefile', '-png', str(pdf), str(prefix)], check=True)
-        result = subprocess.run(['tesseract', str(prefix)+'.png', 'stdout', '--psm', '6'],
-                                check=True, capture_output=True, text=True)
-        (DEST/f'{name}-page-{page}-ocr.txt').write_text(result.stdout)
-        print(f'\n=== {name} SCAN OCR PDF PAGE {page} (not visual verification) ===\n{result.stdout}')
+    import pymupdf
+    tessdata = ROOT/'build/reference-tessdata'
+    tessdata.mkdir(parents=True, exist_ok=True)
+    language = tessdata/'eng.traineddata'
+    if not language.exists():
+        # Official Tesseract English recognition data; data only, no installer.
+        language.write_bytes(urlopen('https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata', timeout=60).read())
+    with pymupdf.open(pdf) as document:
+        for number in ({'L334': (3, 4, 15), 'L353': (5, 9)}[name]):
+            page = document[number-1]
+            page.get_pixmap(dpi=200).save(DEST/f'{name}-page-{number}.png')
+            tp = page.get_textpage_ocr(full=True, dpi=300, tessdata=str(tessdata))
+            text = page.get_text(textpage=tp, sort=True)
+            (DEST/f'{name}-page-{number}-ocr.txt').write_text(text)
+            print(f'\n=== {name} SCAN OCR PDF PAGE {number} (not visual verification) ===\n{text}')
 
 
 def main():

@@ -6,24 +6,6 @@ on:
 permissions:
   contents: read
 jobs:
-  reference-sources:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Isolated public NACA report extraction
-        run: |
-          python3 -m venv build/reference-venv
-          build/reference-venv/bin/python -m pip install pypdf==6.0.0
-          build/reference-venv/bin/python tools/extract_spitfire_sources.py --ocr-review
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: spitfire-source-reports
-          path: results/spitfire-source/
-          if-no-files-found: error
   damaged-coupling:
     runs-on: ubuntu-latest
     timeout-minutes: 5
