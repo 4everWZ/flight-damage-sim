@@ -23,6 +23,28 @@ jobs:
             results/cell-frame-*.json
             results/cell-frame-*.csv
           if-no-files-found: error
+  damaged-coupling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Actual damaged handoff and sustained structural loads
+        run: |
+          make -j2 build/damaged-handoff-probe
+          mkdir -p results
+          build/damaged-handoff-probe data/validation-material.airframe results/damaged-handoff-traces.csv > results/damaged-handoff-summary.csv
+          python3 tools/sustained_load_experiments.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: damaged-coupling-evidence
+          path: |
+            results/damaged-handoff-*.csv
+            results/sustained-load-*.csv
+            results/sustained-load-summary.json
+          if-no-files-found: error
   build-config:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -76,6 +98,15 @@ jobs:
         run: python3 tools/control_fault_reference.py
       - name: Fault transition continuity and actuator-time refinement
         run: python3 tools/control_transition_reference.py
+      - name: Reference-input mapping and current synthetic capability
+        run: python3 tools/reference_gap_experiments.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference-gap-evidence
+          path: |
+            results/reference-gap-*.csv
+            results/reference-gap-summary.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: lifting-line-reference-evidence

@@ -94,6 +94,15 @@ build/lagged-control-tests: $(CORE_DEPS) tests/lagged_control_tests.cpp include/
 build/cell-frame-tests: $(CORE_DEPS) tests/cell_frame_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/cell_frame_tests.cpp -o $@
 
+build/damaged-handoff-probe: $(CORE_DEPS) tests/damaged_handoff_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/damaged_handoff_probe.cpp -o $@
+
+build/sustained-load-probe: $(CORE_DEPS) tests/sustained_load_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/sustained_load_probe.cpp -o $@
+
+build/reference-gap-probe: $(CORE_DEPS) tests/reference_gap_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/reference_gap_probe.cpp -o $@
+
 test: all
 	./build/surface-sampling-tests data/validation-material.airframe
 	./build/aerodynamics-tests data/validation-material.airframe
