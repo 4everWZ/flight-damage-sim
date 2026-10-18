@@ -5,6 +5,7 @@ Research preparation only; no simulator or aircraft-profile imports this file.
 Run with pypdf installed in an isolated environment. Downloads/results are ignored.
 """
 import json
+import base64
 import re
 import sys
 from pathlib import Path
@@ -33,6 +34,11 @@ def ocr_review(pdf, name):
             text = page.get_text(textpage=tp, sort=True)
             (DEST/f'{name}-page-{number}-ocr.txt').write_text(text)
             print(f'\n=== {name} SCAN OCR PDF PAGE {number} (not visual verification) ===\n{text}')
+            if '--log-review-images' in sys.argv and (name, number) in (('L334', 4), ('L353', 9)):
+                # Public source scans for clients whose log API transports text
+                # but cannot download binary artifacts. No image is generated.
+                png = page.get_pixmap(dpi=120, colorspace=pymupdf.csGRAY).tobytes('png')
+                print(f'REVIEW_SCAN {name} {number} '+base64.b64encode(png).decode())
 
 
 def main():
