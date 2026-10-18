@@ -6,13 +6,15 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-PR #13 merged as `b3e0095` after explicit confirmation; all four post-merge main CI jobs passed. The current bounded core iteration is on isolated `feature/damaged-control-coupling`. Standing user/repository authorization permits integration after physical review and passing checks for changes needing no human test or material decision; honor actual approval-review results. GitHub owns live PR/check status. Production aerodynamic-data/default-model adoption remains separate. Preserve user changes, original spec and isolated environments; add no Cloud agent configuration to Git.
+PR #14 merged as `686a79d`. Evidence-only PR15 remains draft on its separate branch. The user explicitly approved the per-cell initial-frame/data-format change; implement it separately from main on `feature/cell-reference-frames`. This authorization does not authorize a merge. GitHub owns live PR/check status. Production sectional/default-model adoption and historical aircraft/material calibration remain separate. Preserve user changes, original spec and isolated environments; add no Cloud agent configuration to Git.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
 ## Current bounded iteration
 
-The lagged/rate-limited damaged-control reversal benchmark exposes a missed within-tick turn and wrong aerodynamic torque impulse. Integrate the existing exponential target plus bounded surface speed through its catch times; keep zero-lag behavior, force laws, damage/input meanings and old acceptance predicates. The analytic hardware/cell-wrench matrix and short production 6DoF comparisons are implemented; complete review and repository/remote checks before eligible integration, then verify main CI. See [baseline, correction and limits](../decisions/current-decisions.md#lagged-damaged-controls-within-tick-reversal-and-aerodynamic-impulse). The fixed default live step stays 120 Hz; no human handling or full v0.1 completion is claimed.
+The approved [cell-reference-frame contract and evidence](../decisions/current-decisions.md#approved-per-cell-reference-frames) adds optional `cell_basis` records, identity compatibility and explicit elastic/reference/incidence composition. Keep existing aircraft data and material/control laws unchanged. Validate local flow and body wrenches, signed incidence/dihedral, work, symmetry, attached/detached behavior, full identity telemetry and orientation-only synthetic flights. Run the existing flight/damage checks and CI; publish a separate draft PR without merging. The earlier lagged-control repair is already on main and remains covered by its regressions. The live step stays 120 Hz; no historical flight/structural calibration or human handling claim follows.
+
+After the geometry change, continue source-informed trim/local-flow/stall and component load-path experiments with explicit input/measurement conditions. Geometric representability alone does not make the NACA stall-speed, fixed-lbf roll or destruction-load targets comparable. Do not retune a synthetic polar or strength to fit one source point; keep missing coefficients and material data explicit.
 
 ### Previous clock investigation, completed on the earlier controller
 
@@ -27,6 +29,7 @@ make -j2
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/aim_tracking_experiments.py
+python3 tools/cell_frame_experiments.py
 python3 tools/propulsion_experiments.py
 python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py

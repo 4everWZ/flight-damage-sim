@@ -50,3 +50,9 @@ Received in the project request on 2026-10-14. Quoted verbatim:
 ## Specification provenance
 
 The preserved [FlightLab v0.1 specification](../spec/flight-sim-core-v0.1.original.md) comes from the [assistant response requested by the user](https://chatgpt.com/c/8c79d2da-f148-8328-b951-93766a55c0cd?messageId=83e5c30d-f0ce-4700-9449-9095619ddfbc). It is an assistant-authored engineering proposal. Recovery removed only the surrounding chat introduction, closing commentary, and writing wrapper; the 51-section specification body is unchanged. The original document's status label does not imply that its implementation or physical accuracy has been verified.
+
+## Approved cell-local-frame change — 2026-10-18
+
+The user answered “可以” to this explicit proposal: “Flight 对照实机资料后找到一个基础缺口：当前翼面只有位置，没有各自的初始朝向，因此不能正确表达上反角对局部来流的影响。建议先补‘翼面局部坐标系’，让安装角、上反角进入气动计算，再继续配平和失速验证。这会修改核心气动计算及机体数据格式，旧模型保留默认兼容。可以按这个改吗？”
+
+This authorizes the reviewed per-cell undeformed-frame/data-format change, with old model defaults preserved. The implementation is isolated from evidence-only PR15; it does not authorize merging either PR, retuning aerodynamic/structural constants, adopting a historical aircraft or replacing the material law. Keep the original specification unchanged and record the precise new contract and measured limits in current decisions.
