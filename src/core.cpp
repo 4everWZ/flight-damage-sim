@@ -81,8 +81,13 @@ CurvePoint lookup(const Definition &d, const AeroCell &c, double alpha) {
 Quat cell_frame(const Definition &def, const AeroCell &c) {
   Quat incidence = c.plane == 0 ? Quat::axis({0, 1, 0}, c.incidence)
                                 : Quat::axis({0, 0, 1}, -c.incidence);
-  return Quat::axis({1, 0, 0}, def.nodes[c.node].bend) *
-         Quat::axis({0, 1, 0}, def.nodes[c.node].twist) * incidence;
+  Quat elastic = Quat::axis({1, 0, 0}, def.nodes[c.node].bend) *
+                 Quat::axis({0, 1, 0}, def.nodes[c.node].twist);
+  // Preserve the original arithmetic for both representations of zero angle.
+  if (c.reference_frame.x == 0 && c.reference_frame.y == 0 &&
+      c.reference_frame.z == 0 && std::abs(c.reference_frame.w) == 1)
+    return elastic * incidence;
+  return elastic * c.reference_frame * incidence;
 }
 Wrench cell_load(const Definition &def, AeroCell &c, Vec local, Vec r,
                  double rho, Quat frame, double deflection, bool store) {
@@ -195,6 +200,7 @@ Quat orientation(double alpha) { return Quat::axis({0, 1, 0}, alpha); }
 } // namespace
 Definition Definition::load(const std::string &path) {
   Definition d;
+  std::vector<std::pair<int, Quat>> cell_bases;
   std::ifstream file(path);
   if (!file)
     throw std::runtime_error("cannot read airframe: " + path);
@@ -242,6 +248,26 @@ Definition Definition::load(const std::string &path) {
           c.control_sign >> c.control_gain >> c.table;
       c.incidence = rad(inc);
       d.cells.push_back(c);
+    } else if (tag == "cell_basis") {
+      int id;
+      Quat basis;
+      s >> id >> basis.w >> basis.x >> basis.y >> basis.z;
+      if (!s)
+        throw std::runtime_error("malformed cell_basis row " + std::to_string(line_no));
+      if (!std::isfinite(basis.w) || !std::isfinite(basis.x) ||
+          !std::isfinite(basis.y) || !std::isfinite(basis.z))
+        throw std::runtime_error("non-finite cell basis");
+      double scale = std::max({std::abs(basis.w), std::abs(basis.x),
+                               std::abs(basis.y), std::abs(basis.z)});
+      if (scale == 0)
+        throw std::runtime_error("zero cell basis");
+      // Normalize without overflow/underflow from otherwise valid source data.
+      basis = {basis.w / scale, basis.x / scale, basis.y / scale, basis.z / scale};
+      basis = basis.normalized();
+      if (std::any_of(cell_bases.begin(), cell_bases.end(),
+                      [&](const auto &b) { return b.first == id; }))
+        throw std::runtime_error("duplicate cell basis");
+      cell_bases.push_back({id, basis});
     } else if (tag == "curve") {
       std::string name;
       CurvePoint p;
@@ -361,6 +387,13 @@ Definition Definition::load(const std::string &path) {
         std::find(ids.begin(), ids.end(), c.id) != ids.end())
       throw std::runtime_error("invalid aero cell");
     ids.push_back(c.id);
+  }
+  for (const auto &[id, basis] : cell_bases) {
+    auto c = std::find_if(d.cells.begin(), d.cells.end(),
+                          [&](const auto &cell) { return cell.id == id; });
+    if (c == d.cells.end())
+      throw std::runtime_error("cell basis references unknown cell");
+    c->reference_frame = basis;
   }
   for (auto &tab : d.curves) {
     if (tab.second.size() < 3)

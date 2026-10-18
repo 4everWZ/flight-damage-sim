@@ -14,6 +14,7 @@ Requires C++20 GCC, GNU make and Python 3:
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, actual flight and sampled input
+python3 tools/cell_frame_experiments.py  # opt-in cell bases, identity compatibility and synthetic canted-cell flights
 python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
 python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
 python3 tools/detachment_experiments.py  # owned-cell piece flight and control partition
@@ -85,6 +86,8 @@ The independent mechanics review found and repaired torque-free rotation drift, 
 The optional `data/validation-material.airframe` discretizes the same body's outer-wing mass into named material elements, preserving initial mass/CG/inertia. `damage material left_outer_forward .2` leaves 20% of that element and transfers the removed 8 kg into a separately integrated passive body. Owner mass/CG/full inertia and inertial loads update, with total mass/P/H/instant energy checks. This does not implicitly change aero area or spar section. Material particles have no aero geometry; carriers remain non-removable. The current full-roll small-effect timestep hypothesis failed and is reported separately from passing fixed-trim and conservation checks. PR #2/#3 were reviewed and merged under the user's standing authorization for automatically verified core work.
 
 Rate PI now limits integration to remaining normalized-command headroom within each tick, avoiding stored bias beyond a saturation crossing. Positive/negative three-axis controller benches agree at 60–480 Hz. This does not yet resolve the full-roll small-material-effect timestep hypothesis; its failed result and load-feedback ablation remain reported. Gains, input semantics and actual actuator limits are unchanged.
+
+An airframe may add an optional `cell_basis <cell_id> <qw> <qx> <qy> <qz>` record before or after its cell records. It rotates the existing plane-specific chord/span/normal basis; omitted records preserve the old identity path. The loader normalizes finite nonzero quaternions and rejects duplicate/unknown cell IDs. Positions, mass and material data are separate. See the [rotation order, signs and measured boundary](docs/decisions/current-decisions.md#approved-per-cell-reference-frames).
 
 ## Project documents
 

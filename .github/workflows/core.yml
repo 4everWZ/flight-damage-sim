@@ -6,6 +6,23 @@ on:
 permissions:
   contents: read
 jobs:
+  cell-frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Cell basis geometry, exact identity telemetry and canted-cell flights
+        run: python3 tools/cell_frame_experiments.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cell-frame-evidence
+          path: |
+            results/cell-frame-*.json
+            results/cell-frame-*.csv
+          if-no-files-found: error
   damaged-coupling:
     runs-on: ubuntu-latest
     timeout-minutes: 5

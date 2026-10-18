@@ -67,9 +67,9 @@ int main(int argc, char **argv) {
            <<dot(s.aero.force,lift)/(q*area)<<','<<wing_lift/(q*area)<<','<<inner<<','<<outer<<','
            <<lo*180/pi<<','<<hi*180/pi<<",0,0\n";
     }
-    // Independent geometry counterexample: two prescribed flat panels at 6 deg
-    // dihedral. Positions alone can be imported, but no definition field can
-    // express their span/chord frames. Zero incidence isolates that missing DOF.
+    // Positions-only comparator retained from the pre-frame investigation.
+    // It intentionally omits cell_basis; the oriented counterpart is checked
+    // by cell-frame-tests. Zero incidence isolates the geometric distinction.
     // This is a capability witness, NOT a reconstruction of the NACA wing.
     auto panels=isolated;
     panels.cells.clear();

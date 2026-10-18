@@ -17,6 +17,7 @@ ifneq ($(BUILD_CONFIG_CHANGED),)
 endif
 
 .PHONY: all test clean
+all: build/cell-frame-tests
 all: build/surface-sampling-tests build/sensor-history-probe build/aerodynamics-tests build/sensitivity-probe build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe build/lagged-control-tests
 
 build:
@@ -90,6 +91,9 @@ build/build-config-probe: $(CORE_DEPS) tests/build_config_probe.cpp include/flig
 build/lagged-control-tests: $(CORE_DEPS) tests/lagged_control_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/lagged_control_tests.cpp -o $@
 
+build/cell-frame-tests: $(CORE_DEPS) tests/cell_frame_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/cell_frame_tests.cpp -o $@
+
 build/damaged-handoff-probe: $(CORE_DEPS) tests/damaged_handoff_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/damaged_handoff_probe.cpp -o $@
 
@@ -109,6 +113,7 @@ test: all
 	./build/material-tests data/validation-material.airframe data/validation-bem.airframe
 	./build/control-tests data/validation-material.airframe
 	mkdir -p results
+	./build/cell-frame-tests data/validation-material.airframe results/cell-frame-summary.json
 	./build/lagged-control-tests data/validation-material.airframe results/lagged-control-summary.json
 
 clean:

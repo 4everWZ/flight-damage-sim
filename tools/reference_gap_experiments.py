@@ -69,7 +69,7 @@ def main():
                                     'initial_output_shaft_rpm': flight[0]['rpm'],
                                     'initial_shaft_power_W': flight[0]['shaft_power'],
                                     'note': 'Real 6DoF integration on existing synthetic data, calm wind, controller off; trim solves throttle and normalized trims, not report manifold pressure or physical trim tabs.'},
-        'next_proposal': 'Add explicit undeformed per-cell chord/span orientation, retaining incidence and elastic rotations. Existing plane=horizontal/vertical cannot express sourced fixed 6-degree wing dihedral. No implementation/adoption in this study.'
+        'next_proposal': 'Per-cell reference frames are now implemented by PR16; the retained positions-only comparator intentionally omits them. Next: source-conditioned local stall/control-authority experiments with explicit table and propulsion semantics. No new polar, stall law or material calibration is adopted by this integration.'
     }
     (RESULTS/'reference-gap-summary.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))

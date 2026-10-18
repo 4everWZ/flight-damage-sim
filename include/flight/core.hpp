@@ -48,6 +48,10 @@ struct AeroCell {
   bool attached = true;
   Vec force{}, moment{}, flow{};
   double alpha = 0, beta = 0, q = 0, stall = 0, deflection = 0;
+  // Additional unit rotation of the legacy plane-specific basis in body axes.
+  // Directions use elastic(body axes) * reference_frame * incidence.
+  // Position/flow/force/moment remain body-axis vectors; default is identity.
+  Quat reference_frame{};
 };
 struct ControlChain {
   std::string name;
