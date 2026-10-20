@@ -110,6 +110,9 @@ build/glide-trim-tests: $(CORE_DEPS) tests/glide_trim_tests.cpp include/flight/c
 build/glide-probe: $(CORE_DEPS) tests/glide_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/glide_probe.cpp -o $@
 
+build/trim-stall-probe: $(CORE_DEPS) tests/trim_stall_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/trim_stall_probe.cpp -o $@
+
 test: all
 	mkdir -p results
 	./build/glide-trim-tests data/validation-material.airframe results/glide-trim-summary.json

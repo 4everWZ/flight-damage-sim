@@ -6,6 +6,23 @@ on:
 permissions:
   contents: read
 jobs:
+  trim-stall-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independent lookup/roll checks and elevator envelope diagnosis
+        run: python3 tools/trim_stall_diagnostics.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trim-stall-diagnostic-evidence
+          path: |
+            results/trim-stall-*.json
+            results/trim-stall-*.csv
+          if-no-files-found: error
   glide-trim:
     runs-on: ubuntu-latest
     timeout-minutes: 6
