@@ -18,7 +18,7 @@ REPORTS = {
     'NACA0009-double': ('19930092885', (4, 5, 7, 19, 20, 37, 38, 39, 40)),
     'NACA0015-plain': ('19930092872', (4, 5, 6, 15, 16, 17, 18)),
 }
-LOG_PAGES = {('NACA0009-double', 37), ('NACA0015-plain', 17)}
+LOG_PAGES = {('NACA0009-double', page) for page in (5, 7, 20, 37)} | {('NACA0015-plain', 17)}
 
 
 def main():
@@ -42,6 +42,8 @@ def main():
             (DEST/f'{name}-pages.json').write_text(json.dumps(pages, indent=2)+'\n')
             for number in selected:
                 page = document[number-1]
+                if name == 'NACA0009-double' and number in (4, 5, 7):
+                    print(f'CONTROL_SOURCE_TEXT {name} PDF{number}\n{pages[number-1]["text"]}')
                 png = page.get_pixmap(dpi=200, colorspace=pymupdf.csGRAY).tobytes('png')
                 (DEST/f'{name}-page-{number}.png').write_bytes(png)
                 if args.log_review_images and (name, number) in LOG_PAGES:
