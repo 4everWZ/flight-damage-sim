@@ -16,6 +16,7 @@ Requires C++20 GCC, GNU make and Python 3:
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, dynamic simulated flight and sampled input
+python3 tools/control_polar_calibration.py  # fixed-condition preparation; published program-output replay and separate synthetic 2D checks
 python3 tools/control_polar_experiments.py  # optional 2D component coefficients, baseline identity and actual damage/control paths
 python3 tools/trim_stall_diagnostics.py  # independent table/roll checks, pitch envelope and dynamic simulated flights
 python3 tools/glide_experiments.py  # fixed-throttle glide equilibrium, dynamic simulated damaged transients and separate static-flow diagnostics

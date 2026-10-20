@@ -1,0 +1,62 @@
+{
+  "name": "camrad-mod1-neutral-output",
+  "evidence_kind": "published_program_output",
+  "source": {
+    "title": "Implementation of a Trailing-Edge Flap Analysis Model in the CAMRAD.Mod1/HIRES Rotor Performance and Loads Code",
+    "url": "https://ntrs.nasa.gov/api/citations/19990047903/downloads/19990047903.pdf",
+    "location": "Sample AIRFOIL program output, printed p.33 / PDF37, unflapped radial segment R=0.000..0.780, Mach 0.30000",
+    "reading": "Five rows transcribed from explicit numeric tokens in NTRS PDF text; alpha -2 and +4 rows are excluded because their CD decimal point is absent in this extraction. No symmetry fill, curve digitization or independent scan verification is claimed.",
+    "provenance_limit": "Published interpolated program output, not identified as a wind-tunnel measurement set. Flapped-segment numerical output is elided. Reynolds number, transition, gap/seal and uncertainty are not supplied for these sample rows."
+  },
+  "conditions": {
+    "airfoil": "NACA 0015",
+    "geometry_role": "unflapped sample section",
+    "flap_chord_ratio": null,
+    "mach": 0.3,
+    "reynolds": null,
+    "transition": null,
+    "flap_gap": null,
+    "delta_positive": "trailing_edge_down",
+    "moment_reference_x_over_c": 0.25,
+    "moment_positive": "nose_up",
+    "coefficient_axes": "wind_lift_drag_section_pitch",
+    "lift_mach_basis": "already_conditioned"
+  },
+  "rows": [
+    {
+      "alpha_deg": -8,
+      "delta_deg": 0,
+      "cl": -0.8634,
+      "cd": 0.0221,
+      "cm": -0.0133
+    },
+    {
+      "alpha_deg": -4,
+      "delta_deg": 0,
+      "cl": -0.4347,
+      "cd": 0.015,
+      "cm": -0.0062
+    },
+    {
+      "alpha_deg": 0,
+      "delta_deg": 0,
+      "cl": 0,
+      "cd": 0.0127,
+      "cm": 0
+    },
+    {
+      "alpha_deg": 2,
+      "delta_deg": 0,
+      "cl": 0.2172,
+      "cd": 0.0132,
+      "cm": 0.0031
+    },
+    {
+      "alpha_deg": 8,
+      "delta_deg": 0,
+      "cl": 0.8634,
+      "cd": 0.0221,
+      "cm": 0.0133
+    }
+  ]
+}

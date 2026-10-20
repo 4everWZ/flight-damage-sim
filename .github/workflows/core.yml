@@ -16,6 +16,8 @@ jobs:
           fetch-depth: 0
       - name: Optional component polar, baseline identity and actual control/damage paths
         run: python3 tools/control_polar_experiments.py
+      - name: Fixed-condition calibration preparation and separate published-output replay
+        run: python3 tools/control_polar_calibration.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

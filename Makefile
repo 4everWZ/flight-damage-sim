@@ -117,6 +117,9 @@ build/trim-stall-probe: $(CORE_DEPS) tests/trim_stall_probe.cpp include/flight/c
 build/control-polar-tests: $(CORE_DEPS) tests/control_polar_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/control_polar_tests.cpp -o $@
 
+build/control-polar-reference-probe: $(CORE_DEPS) tests/control_polar_reference_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/control_polar_reference_probe.cpp -o $@
+
 test: all
 	mkdir -p results
 	./build/control-polar-tests data/validation-material.airframe results/control-polar-summary.json
