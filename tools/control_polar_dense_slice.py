@@ -108,7 +108,7 @@ def main():
                         'Delta 15 remains absent from training. All readings share the same faired source experiment and correlated systematic uncertainty.',
                         'Reading-only bounds exclude source angle errors and unknown absolute-drag/tunnel corrections; no statistical confidence or physical pass criterion.',
                         'The source +/-.3 degree effective-alpha error is specified at zero lift, not a global bound for all alpha.',
-                        'Mach, transition, native CM vector sign and sectional/effective-component transfer remain unqualified.'],
+                        'Mach, transition and sectional/effective-component transfer remain unqualified. The horizontal-section CM sign maps without reversal through the directly cited NACA721 convention; this does not resolve source Mach or a quarter-chord-to-CG load transfer.'],
                'next_experiment':'Resolve source flow/convention evidence before any native replay; if coefficient interpolation is extended, preselect additional unseen deflections and retain current held-out readings.'}
     OUT.mkdir(exist_ok=True)
     (OUT/'control-polar-dense-summary.json').write_text(json.dumps(summary,indent=2)+'\n')

@@ -33,7 +33,10 @@
     "geometry_pdf20": "Positive depicted flap deflections are trailing-edge down; c1=.20c, c2=.15c. The slice retains nominal delta2=delta1, both gaps sealed.",
     "precision_pdf7": "Effective-alpha error at zero lift about +/-.3 deg, not a bound over all alpha; each hinge setting +/-.2 deg. Only lift tunnel-corrected; absolute drag corrections unknown.",
     "conditions_pdf4": "15 psf, about 76 mph, effective Re 2760000, turbulence factor 1.93. No source Mach or temperature established.",
-    "native_cm_vector_sign": "Unresolved: retain the report sign; do not infer a native vector mapping from conventional naming."
+    "native_cm_vector_sign": "Mapped through L-290 reference 7, NACA721 PDF27: positive pitching M is Z toward X. With native FRD axes this is +Y, nose up. For a matched horizontal section about the same quarter-chord point, CM_native = CM_report; no sign flip.",
+    "native_cm_multiplier_horizontal": 1,
+    "native_cm_definition_source": "https://ntrs.nasa.gov/api/citations/19930091799/downloads/19930091799.pdf#page=27",
+    "remaining_mach_gap": "L-290 does not establish source Mach or case-linked static thermodynamic state. NACA387's atmospheric differential manometer and generic standard-air example do not provide this 1943 run's absolute pressure/temperature. No Mach is adopted."
   },
   "reading_allowance_note": "New congested-curve manual reading allowances CL +/-.04, CD +/-.003, CM +/-.007. Retained separately from frozen smaller allowances and source/systematic uncertainty; not a physical acceptance tolerance.",
   "rows": [
