@@ -55,7 +55,9 @@ def main():
                             'residual_predicted_minus_observed': predicted-observed[key],
                             'reading_only_residual_halfwidth': reading_bound})
     try:
-        export_control_rows(source, copy.deepcopy(source['conditions']), 'not_eligible')
+        # Export only the training view. The four corners already form a
+        # complete rectangle; the held-out row must not become training data.
+        export_control_rows({**source, 'rows': train}, copy.deepcopy(source['conditions']), 'not_eligible')
     except ValueError as error:
         blocked = str(error)
     else:
@@ -88,7 +90,7 @@ def main():
                'runtime_export_blocked': blocked,
                'additional_unresolved_export_requirements': ['transition and measured Mach/temperature',
                    'consistent report-to-native coefficient/deflection signs',
-                   'a complete rectangular grid; retain the held-out point for evaluation',
+                   'adequate deflection resolution: the rectangular training grid misses its held-out center',
                    'explicit effective-component versus sectional/induced-drag mapping'],
                'configuration_guard_synthetic_rejections': rejected,
                'physical_validation': False,
