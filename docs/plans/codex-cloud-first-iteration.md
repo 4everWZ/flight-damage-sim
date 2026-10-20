@@ -32,7 +32,7 @@ The next EDIR increment preserves PR19's frozen implementation/evidence at `4d59
 
 The [measured-source increment](../decisions/current-decisions.md#measured-control-surface-subset-and-source-qualification) now retains five faired-curve readings from a fixed equal-linkage NACA 0009 double flap, with scan pixels and explicit reading/source uncertainty. Its four-corner coefficient-space holdout misses central CL/CM; unknown Mach and remaining convention/condition gaps block runtime export. The directly relevant NACA 0015 candidate is partial because inspected plots provide hinge moments and drag increments rather than an absolute CD baseline. A demonstrated preparation-tool mismatch now rejects contradictory declared flap configurations. No runtime/default change or historical aircraft fit is claimed; denser independent deflection readings and condition/sign qualification are the next useful experiment.
 
-The bounded continuation first verified `5d26fe8` full CI 39409371385 terminal success (all nine jobs). Before transcribing further coefficients, preselected additions are training alpha −4/+4 at forward delta 5 and 20 degrees, plus held-out alpha 0/delta 15. The frozen alpha 0/delta 5 observation remains held out, and the old four-corner result remains unchanged. The new 5-degree training station changes that old center into an alpha-only interpolation check; the separate 15-degree observation tests an unseen delta between 10 and 20. Both use figure 4(a)'s nominal equal-relative-angle linkage and sealed gaps. Read original symbols/precision/geometry scans before adopting any sign interpretation; no assumed Mach or runtime export is authorized.
+The bounded continuation verified `5d26fe8` full CI 39409371385 terminal success (all nine jobs), then completed the [preselected dense slice](../decisions/current-decisions.md#preselected-denser-measured-flap-slice). The old center remains held out and its four-corner failure is frozen. Added delta-5 endpoint readings improve that center's alpha interpolation; the separately preselected, unseen delta-15 observation retains a CM discrepancy slightly outside reading-only bounds. Original symbol/precision/geometry scans confirm relative hinge definitions, positive trailing-edge-down deflections and quarter-chord CM; Mach and the native CM vector mapping remain unqualified. No assumed Mach, native replay, runtime/default change or merge is adopted. Outputs use control-polar-dense prefixes; authoritative condition/convention evidence is the next requirement for native replay.
 
 ### Previous clock investigation, completed on the earlier controller
 
@@ -53,6 +53,7 @@ python3 tools/trim_stall_diagnostics.py
 python3 tools/control_polar_experiments.py
 python3 tools/control_polar_calibration.py
 python3 tools/control_polar_measured_subset.py
+python3 tools/control_polar_dense_slice.py
 python3 tools/propulsion_experiments.py
 python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py
