@@ -22,6 +22,8 @@ jobs:
         run: python3 tools/control_polar_measured_subset.py
       - name: Preselected denser measured flap stations with preserved holdouts
         run: python3 tools/control_polar_dense_slice.py
+      - name: Isolated CR-3439 section replay with withheld deflection curves
+        run: python3 tools/control_polar_cr3439.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -29,6 +31,7 @@ jobs:
           path: |
             results/control-polar-*.json
             results/control-polar-*.csv
+            results/control-polar-*.records
           if-no-files-found: error
   trim-stall-diagnostics:
     runs-on: ubuntu-latest
