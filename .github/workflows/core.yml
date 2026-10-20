@@ -6,6 +6,24 @@ on:
 permissions:
   contents: read
 jobs:
+  control-polar-2d:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Optional component polar, baseline identity and actual control/damage paths
+        run: python3 tools/control_polar_experiments.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: control-polar-evidence
+          path: |
+            results/control-polar-*.json
+            results/control-polar-*.csv
+          if-no-files-found: error
   trim-stall-diagnostics:
     runs-on: ubuntu-latest
     timeout-minutes: 4

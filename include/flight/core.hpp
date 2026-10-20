@@ -38,6 +38,14 @@ struct MassProperties {
 struct CurvePoint {
   double alpha = 0, cl = 0, cd = 0, cm = 0;
 };
+struct ControlPolarSlice {
+  double delta = 0;
+  std::vector<CurvePoint> points;
+};
+struct ControlPolar {
+  std::string name;
+  std::vector<ControlPolarSlice> slices; // Rectangular delta/flow-alpha grid.
+};
 struct AeroCell {
   int id = 0, node = 0, chain = -1, plane = 0; // plane 0 horizontal, 1 vertical
   Vec position{};
@@ -52,6 +60,13 @@ struct AeroCell {
   // Directions use elastic(body axes) * reference_frame * incidence.
   // Position/flow/force/moment remain body-axis vectors; default is identity.
   Quat reference_frame{};
+  // Empty preserves the legacy effective-alpha lookup. An explicit binding
+  // samples CL/CD/CM(flow_alpha, signed chain endpoint * hinge).
+  std::string control_polar;
+  // alpha/stall retain the legacy effective-alpha/15-degree diagnostic proxy,
+  // including when this optional lookup is selected; neither is separation data.
+  double flow_alpha = 0;
+  bool control_polar_clamped = false;
 };
 struct ControlChain {
   std::string name;
@@ -163,6 +178,7 @@ struct Definition {
   std::vector<StructuralNode> nodes;
   std::vector<StructuralEdge> edges;
   std::vector<std::pair<std::string, std::vector<CurvePoint>>> curves;
+  std::vector<ControlPolar> control_polars;
   Engine engine;
   double body_drag_area = 0, handoff = .25;
   std::array<bool, 3> trim_enabled{true, true, true};

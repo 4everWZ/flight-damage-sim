@@ -6,7 +6,9 @@ Complete and review a buildable core-first foundation for `4everWZ/flight-damage
 
 ## Working state
 
-PR15 and PR16 are merged; main remains `264701423482dc0cb48253bd7115ed667adedfc9`. PR17 is draft at `f25e9c75355bae4958b83e1bdbc17761a4d6a085`, with all seven CI jobs successful (run 39151442523) and its evidence retained. The independent `feature/trim-stall-diagnostics` change is based on PR17 and must remain a separate draft, targeting PR17's branch until integration is authorized. No new merge authorization exists. It diagnoses the trim/elevator envelope and high-angle roll gain without changing production aerodynamic/control/material laws. Historical aircraft calibration remains separate.
+PR17 and PR18 were explicitly approved and merged on 2026-10-20, using normal merge commits to retain the stack ancestry. PR17 merge is `eac4edfe94fa28268af3f672d2b2256466e6f2b0`; PR18 merge/main baseline is `f0fa41e3190074b09a15b3cfae67ebb3d7b67eb5`. Their post-merge CI runs 39394128517 and 39394207777 succeeded, and main's tree matches the reviewed PR18 head. No force push or physics retuning was needed.
+
+The user also approved the smallest optional two-dimensional control-polar implementation on `feature/control-polar-2d`, disabled unless cells explicitly bind a new table. That scope excludes downwash and dynamic stall. Its future implementation PR remains draft and needs separate merge authorization. Preserve the original specification, existing fixture files and source evidence; historical aircraft calibration remains separate.
 
 The repository-local APEX skills preserve source content/license and do not modify global permissions, credentials or other projects. Static installation checks do not constitute skill behavioral validation.
 
@@ -24,6 +26,8 @@ The local-flow/control/load experiments retain the existing nonlinear laws. Six-
 
 The geometry change passes independent local-flow/body-wrench, incidence/dihedral, work, symmetry and attached/detached tests. Explicit signed identities retain complete telemetry, and orientation-only synthetic flights retain actual controls and load-driven damage. The useful next bounded experiment is source-conditioned local stall progression and remaining aileron authority, preserving TAS/indicated speed, powered/closed-throttle and table semantics. Define any new table-specific stall/section law before adoption; do not fit one historical point or change material strengths to force a result. Component load-path geometry and material calibration remain separate open work.
 
+The approved [optional two-dimensional control-polar contract](../decisions/current-decisions.md#optional-two-dimensional-control-polar) is now implemented through the shared attached/detached cell force path. Independent bilinear wrench/work, equal-legacy-angle discrimination, input validation, real mechanical faults, force-stage sampling, structural graph and detachment tests pass. Default and unbound-table flight/cell/edge telemetry in four scenarios and default live JSON match the accepted main core. The ignored enabled synthetic fixture runs actual trim, mixed input and load-driven damage. This establishes model expressiveness/integration, not historical accuracy or corrected post-stall handling. Keep the current static diagnostic proxy explicitly labeled; new control/separation data and induced flow remain distinct follow-up work.
+
 ### Previous clock investigation, completed on the earlier controller
 
 The final discriminating experiment is complete: keep the physical kernel/actuators/rotor/structure at 960 Hz; independently change internal controller update, sensor read and request output clocks, then close at the native force age. The coarse endpoint matches the previous fixed-age run and the high endpoint reproduces the default native 960 Hz chain exactly. A separate 240 Hz sampled-system cross-check reproduces ~0.12181 m of effect disagreement on identical physical stepping, versus ~0.12418 m in the original native comparison.
@@ -40,6 +44,7 @@ python3 tools/aim_tracking_experiments.py
 python3 tools/cell_frame_experiments.py
 python3 tools/glide_experiments.py
 python3 tools/trim_stall_diagnostics.py
+python3 tools/control_polar_experiments.py
 python3 tools/propulsion_experiments.py
 python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py
