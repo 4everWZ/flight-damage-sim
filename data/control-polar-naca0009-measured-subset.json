@@ -1,0 +1,61 @@
+{
+  "name": "naca0009-fixed-double-flap-curve-subset",
+  "evidence_kind": "measurement",
+  "source": {
+    "url": "https://ntrs.nasa.gov/api/citations/19930092885/downloads/19930092885.pdf",
+    "report": "NACA WR L-290, Sears and Purser, 1943",
+    "location": "Figure 4(a), PDF page 37; conditions PDF4, symbols PDF5, precision PDF7",
+    "reading": "Manual reads of faired experimental curves, not raw balance readings. Original scan rendered at 200 dpi in source CI 39407220652. No symmetry fill or hinge-moment substitution."
+  },
+  "conditions": {
+    "airfoil": "NACA 0009",
+    "geometry_role": "two-hinge section with fixed equal relative flap linkage",
+    "flap_chord_ratio": 0.20,
+    "mach": null,
+    "reynolds": {"effective": 2760000, "tunnel_turbulence_factor": 1.93, "test_reynolds_reported_directly": null},
+    "transition": null,
+    "flap_gap": "both sealed with grease",
+    "delta_positive": "positive report flap deflection producing positive lift",
+    "moment_reference_x_over_c": 0.25,
+    "moment_positive": "positive report section pitching moment",
+    "coefficient_axes": "report section lift/profile_drag/quarter_chord_pitch",
+    "lift_mach_basis": "already_conditioned",
+    "configuration": {
+      "forward_flap_chord_over_c": 0.20,
+      "rear_flap_chord_over_c": 0.15,
+      "delta_deg_definition": "forward flap relative to airfoil",
+      "rear_delta_definition": "rear flap relative to forward flap",
+      "rear_relative_delta_ratio": 1,
+      "forward_gap": "sealed",
+      "rear_gap": "sealed"
+    },
+    "chord_m": 0.6096,
+    "span_m": 1.2192,
+    "dynamic_pressure_psf": 15,
+    "reported_speed_mph_approx": 76
+  },
+  "uncertainty": {
+    "source_effective_alpha_max_error_deg_approx": 0.3,
+    "source_each_hinge_setting_accuracy_deg": 0.2,
+    "coefficient_reading_halfwidth": {"cl": 0.03, "cd": 0.002, "cm": 0.005},
+    "meaning": "Conservative manual reading allowances only, not statistical confidence or total experimental uncertainty. Angle-setting errors are separate for both hinges; equal linkage is nominal. Absolute drag has unknown tunnel/turbulence corrections. Lift alone received the report tunnel correction."
+  },
+  "scan_calibration": {
+    "image_dimensions_px": [1706, 2200],
+    "dpi": 200,
+    "origin": "top-left",
+    "cl_axis": {"zero_x_px": 959, "pixels_per_unit": 332},
+    "cm_axis": {"zero_y_at_x818_px": 307, "zero_line_dy_per_dx": 0.014, "pixels_per_unit": 1675},
+    "cd_axis": {"zero_y_at_x818_px": 1247, "zero_line_dy_per_dx": 0.014, "pixels_per_unit": 3330},
+    "reading": "Approximate local grid calibration with slight scan skew. Pixels identify faired curves; rounded coefficients retain the reading allowance."
+  },
+  "rows": [
+    {"id": "train-a-4-d0", "role": "train", "alpha_deg": -4, "delta_deg": 0, "cl": -0.42, "cd": 0.015, "cm": -0.001, "pixels": {"lift": [818,1478], "drag": [818,1198], "moment": [818,309]}},
+    {"id": "train-a4-d0", "role": "train", "alpha_deg": 4, "delta_deg": 0, "cl": 0.36, "cd": 0.013, "cm": 0.010, "pixels": {"lift": [1080,1346], "drag": [1080,1208], "moment": [1080,294]}},
+    {"id": "train-a-4-d10", "role": "train", "alpha_deg": -4, "delta_deg": 10, "cl": 0.32, "cd": 0.021, "cm": -0.150, "pixels": {"lift": [1066,1478], "drag": [1066,1180], "moment": [1066,562]}},
+    {"id": "train-a4-d10", "role": "train", "alpha_deg": 4, "delta_deg": 10, "cl": 1.02, "cd": 0.034, "cm": -0.121, "pixels": {"lift": [1296,1346], "drag": [1296,1140], "moment": [1296,516]}},
+    {"id": "hold-a0-d5", "role": "heldout", "alpha_deg": 0, "delta_deg": 5, "cl": 0.47, "cd": 0.017, "cm": -0.100, "pixels": {"lift": [1114,1412], "drag": [1114,1194], "moment": [1114,478]}}
+  ],
+  "not_a_runtime_airframe": true,
+  "physical_calibration_performed": false
+}

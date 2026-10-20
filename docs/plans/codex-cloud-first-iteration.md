@@ -30,6 +30,8 @@ The approved [optional two-dimensional control-polar contract](../decisions/curr
 
 The next EDIR increment preserves PR19's frozen implementation/evidence at `4d596b0` (nine successful CI jobs, run 39396239197). Runtime review selected no demonstrated core defect. The separate [fixed-condition calibration preparation](../decisions/current-decisions.md#fixed-condition-control-polar-calibration-preparation) now tests a concrete import pitfall: Mach-conditioned lift data would otherwise receive the existing core lift multiplier twice. It retains a published CAMRAD program-output neutral slice as software-reference evidence only, refuses to fabricate missing flap deflections, reports coarse-grid holdout error, and independently exercises complete synthetic 2D preparation. No new flights, runtime law, production fixture or historical aircraft calibration is added. Source-matched measured control data remains the useful next acquisition; incomplete data stops that validation claim, not other permitted prototype work.
 
+The [measured-source increment](../decisions/current-decisions.md#measured-control-surface-subset-and-source-qualification) now retains five faired-curve readings from a fixed equal-linkage NACA 0009 double flap, with scan pixels and explicit reading/source uncertainty. Its four-corner coefficient-space holdout misses central CL/CM; unknown Mach and remaining convention/condition gaps block runtime export. The directly relevant NACA 0015 candidate is partial because inspected plots provide hinge moments and drag increments rather than an absolute CD baseline. A demonstrated preparation-tool mismatch now rejects contradictory declared flap configurations. No runtime/default change or historical aircraft fit is claimed; denser independent deflection readings and condition/sign qualification are the next useful experiment.
+
 ### Previous clock investigation, completed on the earlier controller
 
 The final discriminating experiment is complete: keep the physical kernel/actuators/rotor/structure at 960 Hz; independently change internal controller update, sensor read and request output clocks, then close at the native force age. The coarse endpoint matches the previous fixed-age run and the high endpoint reproduces the default native 960 Hz chain exactly. A separate 240 Hz sampled-system cross-check reproduces ~0.12181 m of effect disagreement on identical physical stepping, versus ~0.12418 m in the original native comparison.
@@ -48,6 +50,7 @@ python3 tools/glide_experiments.py
 python3 tools/trim_stall_diagnostics.py
 python3 tools/control_polar_experiments.py
 python3 tools/control_polar_calibration.py
+python3 tools/control_polar_measured_subset.py
 python3 tools/propulsion_experiments.py
 python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py

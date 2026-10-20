@@ -42,7 +42,8 @@ def normalized_rows(dataset, target):
         raise ValueError('declare the evidence kind explicitly')
     # No implicit transfers across Mach, geometry, moment origin, transition
     # or sign conventions. Unknowns remain unknown even when both are None.
-    if any(conditions[k] != target[k] for k in IDENTITY):
+    if (any(conditions[k] != target[k] for k in IDENTITY)
+            or conditions.get('configuration') != target.get('configuration')):
         raise ValueError('source/target condition or convention mismatch')
     mach = conditions['mach']
     if not isinstance(mach, (int, float)) or not math.isfinite(mach) or mach <= 0:

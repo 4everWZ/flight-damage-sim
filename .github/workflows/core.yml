@@ -18,6 +18,8 @@ jobs:
         run: python3 tools/control_polar_experiments.py
       - name: Fixed-condition calibration preparation and separate published-output replay
         run: python3 tools/control_polar_calibration.py
+      - name: Separate measured-curve holdout and declared flap-configuration guards
+        run: python3 tools/control_polar_measured_subset.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
