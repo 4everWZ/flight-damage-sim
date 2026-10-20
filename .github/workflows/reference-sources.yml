@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - tools/extract_spitfire_sources.py
+      - tools/extract_control_sources.py
       - tools/spitfire_reference_summary.py
       - data/spitfire-va-naca-reference.json
       - .github/workflows/reference-sources.yml
@@ -24,9 +25,17 @@ jobs:
           python3 -m venv build/reference-venv
           build/reference-venv/bin/python -m pip install pypdf==6.0.0 pymupdf==1.26.6
           build/reference-venv/bin/python tools/extract_spitfire_sources.py --ocr-review
+      - name: Read fixed official control-surface reports and original scan figures
+        run: build/reference-venv/bin/python tools/extract_control_sources.py --log-review-images
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: spitfire-source-reports
           path: results/spitfire-source/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: control-source-reports
+          path: results/control-source/
           if-no-files-found: error
