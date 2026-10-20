@@ -20,9 +20,11 @@ REPORTS = {
     # L-290 references 7 and 4: coefficient/axis definitions and facility.
     'NACA721-conventions': ('19930091799', (9, 21, 27)),
     'NACA387-facility': ('19930091086', (5,)),
+    'CR3439-ms0313': ('19830008016', (3, 5, 6, 7, 8, 9, 18, 31, 32, 33)),
 }
 LOG_PAGES = ({('NACA0009-double', page) for page in (5, 7, 20, 37)}
-             | {('NACA0015-plain', 17), ('NACA721-conventions', 27)})
+             | {('NACA0015-plain', 17), ('NACA721-conventions', 27)}
+             | {('CR3439-ms0313', page) for page in (18, 31, 32, 33)})
 
 
 def main():
@@ -49,9 +51,12 @@ def main():
                     print(f'CONTROL_SOURCE_TEXT {name} PDF{record["pdf_page_1based"]}\n{record["text"]}')
             for number in selected:
                 page = document[number-1]
-                if (name == 'NACA0009-double' and number in (4, 5, 7)) or name == 'NACA721-conventions':
+                if ((name == 'NACA0009-double' and number in (4, 5, 7))
+                        or name == 'NACA721-conventions'
+                        or (name == 'CR3439-ms0313' and number <= 9)):
                     print(f'CONTROL_SOURCE_TEXT {name} PDF{number}\n{pages[number-1]["text"]}')
-                png = page.get_pixmap(dpi=200, colorspace=pymupdf.csGRAY).tobytes('png')
+                dpi = 300 if name == 'CR3439-ms0313' else 200
+                png = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY).tobytes('png')
                 (DEST/f'{name}-page-{number}.png').write_bytes(png)
                 if args.log_review_images and (name, number) in LOG_PAGES:
                     # Bounded text transport for clients unable to read binary
@@ -61,6 +66,7 @@ def main():
                     for i, chunk in enumerate(chunks):
                         print(f'CONTROL_SCAN {name} {number} {i+1}/{len(chunks)} {chunk}')
             index[name] = {'source_url': url, 'pdf_pages': len(document),
+                           'scan_dpi': 300 if name == 'CR3439-ms0313' else 200,
                            'selected_pdf_pages_1based': list(selected),
                            'meaning': 'Original scan/text only; no coefficient extraction or physical validation claimed.'}
     (DEST/'index.json').write_text(json.dumps(index, indent=2)+'\n')
