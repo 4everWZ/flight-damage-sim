@@ -17,8 +17,12 @@ DEST = ROOT/'results/control-source'
 REPORTS = {
     'NACA0009-double': ('19930092885', (4, 5, 7, 19, 20, 37, 38, 39, 40)),
     'NACA0015-plain': ('19930092872', (4, 5, 6, 15, 16, 17, 18)),
+    # L-290 references 7 and 4: coefficient/axis definitions and facility.
+    'NACA721-conventions': ('19930091799', (9, 21, 27)),
+    'NACA387-facility': ('19930091086', (5,)),
 }
-LOG_PAGES = {('NACA0009-double', page) for page in (5, 7, 20, 37)} | {('NACA0015-plain', 17)}
+LOG_PAGES = ({('NACA0009-double', page) for page in (5, 7, 20, 37)}
+             | {('NACA0015-plain', 17), ('NACA721-conventions', 27)})
 
 
 def main():
@@ -40,9 +44,12 @@ def main():
             pages = [{'pdf_page_1based': i+1, 'text': page.get_text(sort=True)}
                      for i, page in enumerate(document)]
             (DEST/f'{name}-pages.json').write_text(json.dumps(pages, indent=2)+'\n')
+            if name == 'NACA387-facility':
+                for record in pages:
+                    print(f'CONTROL_SOURCE_TEXT {name} PDF{record["pdf_page_1based"]}\n{record["text"]}')
             for number in selected:
                 page = document[number-1]
-                if name == 'NACA0009-double' and number in (4, 5, 7):
+                if (name == 'NACA0009-double' and number in (4, 5, 7)) or name == 'NACA721-conventions':
                     print(f'CONTROL_SOURCE_TEXT {name} PDF{number}\n{pages[number-1]["text"]}')
                 png = page.get_pixmap(dpi=200, colorspace=pymupdf.csGRAY).tobytes('png')
                 (DEST/f'{name}-page-{number}.png').write_bytes(png)
