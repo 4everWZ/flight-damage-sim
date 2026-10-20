@@ -14,6 +14,7 @@ Requires C++20 GCC, GNU make and Python 3:
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, actual flight and sampled input
+python3 tools/glide_experiments.py  # fixed-throttle glide equilibrium, real damaged transients and separate static-flow diagnostics
 python3 tools/cell_frame_experiments.py  # opt-in cell bases, identity compatibility and synthetic canted-cell flights
 python3 tools/propulsion_experiments.py  # retained legacy-model counterexamples
 python3 tools/rotor_experiments.py       # signed blade loads, pitch governor, free-flight ledgers
@@ -61,6 +62,8 @@ The default is the signed prop variant; use `--airframe validation.airframe` for
 ## Minimal integration boundary
 
 `PilotIntent` carries a world aim direction, normalized roll/pitch/yaw requests, one active flag per axis, throttle, available trim and requested prop RPM ratio. `Simulation::step` advances one fixed tick. Per-cell loads remain available before reduction to a `Wrench`; `integrate_body` is the rigid force/moment boundary, and `integrate_rotor_body` jointly integrates the free body and internal spinning shaft. SI units and frame conventions are documented in current decisions and the core header.
+
+`Simulation::trim_fixed_throttle(TAS, altitude, throttle, prop_rpm_ratio=1)` initializes a force/moment/rotor-balanced air-relative climb or glide while keeping throttle prescribed. Check `converged` and the reported force/moment/rotor/governor residuals before using the entry. Flight-path angle is positive for climb; subsequent ticks integrate freely. This uses the existing synthetic shaft/friction and propeller model, without a calibrated historical idle condition. The legacy `trim(speed, altitude)` remains available. See [evidence and bounds](docs/decisions/current-decisions.md#fixed-throttle-trim-and-glide-controlload-evidence).
 
 `build/flight-live data/validation-bem.airframe` provides a line-oriented local transport. It emits an initial JSON snapshot, then one snapshot per command:
 

@@ -17,6 +17,7 @@ ifneq ($(BUILD_CONFIG_CHANGED),)
 endif
 
 .PHONY: all test clean
+all: build/glide-trim-tests
 all: build/cell-frame-tests
 all: build/surface-sampling-tests build/sensor-history-probe build/aerodynamics-tests build/sensitivity-probe build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe build/lagged-control-tests
 
@@ -103,7 +104,15 @@ build/sustained-load-probe: $(CORE_DEPS) tests/sustained_load_probe.cpp include/
 build/reference-gap-probe: $(CORE_DEPS) tests/reference_gap_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/reference_gap_probe.cpp -o $@
 
+build/glide-trim-tests: $(CORE_DEPS) tests/glide_trim_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/glide_trim_tests.cpp -o $@
+
+build/glide-probe: $(CORE_DEPS) tests/glide_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/glide_probe.cpp -o $@
+
 test: all
+	mkdir -p results
+	./build/glide-trim-tests data/validation-material.airframe results/glide-trim-summary.json
 	./build/surface-sampling-tests data/validation-material.airframe
 	./build/aerodynamics-tests data/validation-material.airframe
 	./build/core-tests data/validation.airframe

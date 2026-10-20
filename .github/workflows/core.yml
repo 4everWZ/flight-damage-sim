@@ -6,6 +6,23 @@ on:
 permissions:
   contents: read
 jobs:
+  glide-trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fixed-throttle equilibrium and real damaged glide transients
+        run: python3 tools/glide_experiments.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: glide-evidence
+          path: |
+            results/glide-*.json
+            results/glide-*.csv
+          if-no-files-found: error
   cell-frames:
     runs-on: ubuntu-latest
     timeout-minutes: 4

@@ -1316,9 +1316,20 @@ void Simulation::reset_trim(const TrimResult &t, double speed,
                             double altitude) {
   body = Body{};
   body.position.z = -altitude;
-  body.velocity = {speed, 0, 0};
-  body.attitude =
-      (orientation(t.alpha) * Quat::axis({1, 0, 0}, t.bank)).normalized();
+  if (t.mode == TrimMode::FixedThrottle) {
+    body.velocity = wind_world +
+                    Vec{speed * std::cos(t.flight_path), 0,
+                        -speed * std::sin(t.flight_path)};
+    body.attitude = (orientation(t.alpha + t.flight_path) *
+                     Quat::axis({1, 0, 0}, t.bank)).normalized();
+    def.engine.target_rpm = def.engine.rated_rpm * clamp(t.intent.prop_rpm_ratio, .5, 1.1);
+    density = 1.225 * std::exp(-altitude / 8500.);
+  } else {
+    // Keep the established level-entry arithmetic and wind interpretation.
+    body.velocity = {speed, 0, 0};
+    body.attitude =
+        (orientation(t.alpha) * Quat::axis({1, 0, 0}, t.bank)).normalized();
+  }
   for (auto &c : def.chains) {
     double command =
         def.trim_enabled[c.axis] ? clamp(t.intent.trim[c.axis], -1, 1) : 0;
@@ -1408,21 +1419,39 @@ void Simulation::reset_trim(const TrimResult &t, double speed,
   }
 }
 TrimResult Simulation::trim(double speed, double altitude) {
-  // Six residuals: alpha, roll/pitch/yaw trim, throttle, bank. Use
-  // finite-difference Newton on the same cell model.
-  if (speed <= 10 || altitude < 0)
+  return trim_condition(speed, altitude, false, .55, 1);
+}
+TrimResult Simulation::trim_fixed_throttle(double speed, double altitude,
+                                          double throttle, double prop_ratio) {
+  if (!std::isfinite(throttle) || throttle < 0 || throttle > 1 ||
+      !std::isfinite(prop_ratio) || prop_ratio < .5 || prop_ratio > 1.1 ||
+      !std::isfinite(wind_world.x) || !std::isfinite(wind_world.y) || !std::isfinite(wind_world.z))
+    throw std::runtime_error("invalid fixed-throttle trim input");
+  return trim_condition(speed, altitude, true, throttle, prop_ratio);
+}
+TrimResult Simulation::trim_condition(double speed, double altitude,
+                                      bool fixed, double throttle,
+                                      double prop_ratio) {
+  // Six residuals: alpha, three control offsets, bank, and either level-flight
+  // throttle or free air-relative path angle. No load/control law is changed.
+  if (!std::isfinite(speed) || !std::isfinite(altitude) || speed <= 10 || altitude < 0)
     throw std::runtime_error("invalid trim condition");
-  std::array<double, 6> x{rad(3), 0, 0, 0, .55, 0};
+  std::array<double, 6> x{rad(3), 0, 0, 0, fixed ? rad(-5) : .55, 0};
   TrimResult out;
+  out.mode = fixed ? TrimMode::FixedThrottle : TrimMode::Level;
   auto residual = [&](const std::array<double, 6> &v) {
     TrimResult t;
     t.alpha = v[0];
     t.bank = v[5];
     t.intent.trim = {v[1], v[2], v[3]};
-    t.intent.throttle = v[4];
+    t.intent.throttle = fixed ? throttle : v[4];
+    t.intent.prop_rpm_ratio = prop_ratio;
+    t.mode = out.mode;
+    t.flight_path = fixed ? v[4] : 0;
     reset_trim(t, speed, altitude);
-    body.attitude =
-        (orientation(v[0]) * Quat::axis({1, 0, 0}, v[5])).normalized();
+    if (!fixed)
+      body.attitude =
+          (orientation(v[0]) * Quat::axis({1, 0, 0}, v[5])).normalized();
     // Include the same elastic feedback used during flight, without advancing
     // material strain.
     for (int elastic = 0; elastic < 6; ++elastic) {
@@ -1477,8 +1506,8 @@ TrimResult Simulation::trim(double speed, double altitude) {
       x[j] += clamp(dx[j], -.2, .2);
     x[0] = clamp(x[0], rad(-5), rad(13));
     for (int j = 1; j < 4; ++j)
-      x[j] = clamp(x[j], -.9, .9);
-    x[4] = clamp(x[4], .01, 1);
+      x[j] = fixed ? clamp(x[j], -1, 1) : clamp(x[j], -.9, .9);
+    x[4] = fixed ? clamp(x[4], rad(-85), rad(85)) : clamp(x[4], .01, 1);
     x[5] = clamp(x[5], -.15, .15);
   }
   auto final_residual = residual(x);
@@ -1489,9 +1518,12 @@ TrimResult Simulation::trim(double speed, double altitude) {
   out.alpha = x[0];
   out.bank = x[5];
   out.intent.trim = {x[1], x[2], x[3]};
-  out.intent.throttle = x[4];
-  body.attitude =
-      (orientation(x[0]) * Quat::axis({1, 0, 0}, x[5])).normalized();
+  out.intent.throttle = fixed ? throttle : x[4];
+  out.intent.prop_rpm_ratio = prop_ratio;
+  out.flight_path = fixed ? x[4] : 0;
+  if (!fixed)
+    body.attitude =
+        (orientation(x[0]) * Quat::axis({1, 0, 0}, x[5])).normalized();
   auto actual = evaluate(body, true);
   out.force_residual_N = actual.force + body.attitude.conjugate().rotate(
                                             {0, 0, mass.mass * gravity});
@@ -1503,6 +1535,12 @@ TrimResult Simulation::trim(double speed, double altitude) {
   out.rotor_acceleration = def.engine.acceleration;
   out.converged =
       out.residual < 1e-6 && std::abs(out.rotor_acceleration) < 1e-6;
+  if (fixed && def.engine.model == PropellerModel::BladeElement) {
+    auto controls = def.engine;
+    advance_propeller_controls(controls, out.intent.throttle, dt);
+    out.propeller_pitch_rate = (controls.pitch - def.engine.pitch) / dt;
+    out.converged = out.converged && std::abs(out.propeller_pitch_rate) < 1e-8;
+  }
   return out;
 }
 } // namespace flight
