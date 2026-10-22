@@ -22,6 +22,55 @@ def read_csv(path):
         return list(csv.DictReader(stream))
 
 
+def check_wrench(value, p, alpha, identity):
+    """Check an exported native wrench against the independent FRD reference."""
+    q_area = value['q']*value['area']; q_area_chord = q_area*value['chord']
+    sine,cosine = math.sin(alpha),math.cos(alpha)
+    offset = ORIGINS[identity[1]]
+    # Independent FRD component formula, not native span/flow or Wrench helpers.
+    force = (q_area*(p['cl']*sine-p['cd']*cosine),0.,-q_area*(p['cl']*cosine+p['cd']*sine))
+    couple = (0.,q_area_chord*p['cm'],0.)
+    arm = (-offset*value['chord'],0.,0.)
+    shift = cross(arm,force)
+    moment = tuple(c+m for c,m in zip(couple,shift))
+    assert all(abs(value['arm_'+axis]-arm[i])/value['chord']<=TOLERANCE for i,axis in enumerate('xyz'))
+    errors = {}
+    for kind,columns,expected,scale in [('force',('wfx','wfy','wfz'),force,q_area),
+                                       ('pure_couple',('mqx','mqy','mqz'),couple,q_area_chord),
+                                       ('moment',('wmx','wmy','wmz'),moment,q_area_chord)]:
+        errors[kind] = []
+        for column,target in zip(columns,expected):
+            error = abs(value[column]-target)/scale
+            assert error <= TOLERANCE, (identity,kind,column,error)
+            errors[kind].append(error)
+    return errors
+
+
+def check_negative_wrenches(record, row, prediction):
+    """Corrupt copies of one native result, not the source data or reference."""
+    value = {k:float(v) for k,v in record.items() if k!='reference'}
+    identity = (row['id'],record['reference'])
+    assert row['role']=='train' and record['reference']=='leading'
+    scale = value['q']*value['area']*value['chord']
+    native_shift = value['wmy']-value['mqy']
+    assert abs(native_shift)/scale > TOLERANCE  # This point discriminates the faults.
+    rejected = []
+    for name,wrong_moment in [('reversed_arm_term',value['mqy']-native_shift),
+                              ('omitted_arm_term',value['mqy'])]:
+        faulty = {**value,'wmy':wrong_moment}
+        try:
+            check_wrench(faulty,prediction,math.radians(row['alpha_deg']),identity)
+        except AssertionError as error:
+            detail = error.args[0]
+            # A parse/identity/arm failure is not evidence that the moment test works.
+            assert detail[0]==identity and detail[1:3]==('moment','wmy'), detail
+            rejected.append({'fault':name,'id':row['id'],'reference':record['reference'],
+                             'rejected_by':'moment/wmy','normalized_error':detail[3]})
+        else:
+            raise AssertionError('wrong reference transformation was accepted: '+name)
+    return rejected
+
+
 def main():
     data = json.loads((ROOT/'data/control-polar-cr3439-section.json').read_text())
     train = [r for r in data['rows'] if r['role']=='train']
@@ -91,26 +140,15 @@ def main():
         assert value['q']>0 and all(math.isfinite(v) for v in value.values())
         for field in ('flow_alpha_rad','delta_eff_rad','clamped'):
             assert value[field]==actual[field]
-        q_area = value['q']*value['area']; q_area_chord = q_area*value['chord']
+        q_area_chord = value['q']*value['area']*value['chord']
         alpha = math.radians(row['alpha_deg']); sine,cosine = math.sin(alpha),math.cos(alpha)
-        p = predicted[row['id']]
-        # Independent FRD component formula, not native span/flow or Wrench helpers.
-        force = (q_area*(p['cl']*sine-p['cd']*cosine),0.,-q_area*(p['cl']*cosine+p['cd']*sine))
-        couple = (0.,q_area_chord*p['cm'],0.)
-        arm = (-offset*value['chord'],0.,0.)
-        shift = cross(arm,force)
-        moment = tuple(c+m for c,m in zip(couple,shift))
-        assert all(abs(value['arm_'+axis]-arm[i])/value['chord']<=TOLERANCE for i,axis in enumerate('xyz'))
+        errors = check_wrench(value,predicted[row['id']],alpha,identity)
         result = {'id':row['id'],'role':row['role'],'reference':name}
-        for kind,columns,expected,scale in [('force',('wfx','wfy','wfz'),force,q_area),
-                                           ('pure_couple',('mqx','mqy','mqz'),couple,q_area_chord),
-                                           ('moment',('wmx','wmy','wmz'),moment,q_area_chord)]:
-            for component,(column,target) in enumerate(zip(columns,expected)):
-                error = abs(value[column]-target)/scale
-                assert error <= TOLERANCE, (identity,kind,column,error)
+        for kind,components in errors.items():
+            for component,error in enumerate(components):
                 if error>worst[kind]['value']:
                     worst[kind] = {'value':error,'id':row['id'],'reference':name,'component':'xyz'[component]}
-            result[kind+'_max_normalized_error'] = max(abs(value[col]-target)/scale for col,target in zip(columns,expected))
+            result[kind+'_max_normalized_error'] = max(components)
         # Native force and pure couple must be identical for all three observers.
         for axis in 'xyz':
             assert value['wf'+axis]==value['f'+axis]
@@ -131,6 +169,7 @@ def main():
             result['translated_reading_only_residual_halfwidth'] = 2*(widths['cm']+abs(offset)*(abs(cosine)*widths['cl']+abs(sine)*widths['cd']))
         comparisons.append(result)
     assert seen=={(r['id'],name) for r in queries for name in ORIGINS}
+    negative = check_negative_wrenches(native[1],queries[0],predicted[queries[0]['id']])
     maxima = {k:max(abs(r['residual']) for r in ledger if r['coefficient']==k) for k in COEFFICIENTS}
     counts = {k:sum(r['outside_reading_only_envelope'] for r in ledger if r['coefficient']==k) for k in COEFFICIENTS}
     # Preserve the published frozen regression outcome, never turn it into a fit.
@@ -153,7 +192,12 @@ def main():
     with (OUT/'control-polar-transfer-comparisons.csv').open('w') as stream:
         writer = csv.DictWriter(stream,fieldnames=list(comparisons[0]));writer.writeheader();writer.writerows(comparisons)
     (OUT/'control-polar-transfer-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+    negative_summary = {'meaning':'Fault injection into native-output copies; same independent checker and unchanged tolerance.',
+                        'positive_comparisons':36,'negative_cases':negative,'normalized_tolerance':TOLERANCE,
+                        'source_or_native_model_modified':False,'physical_validation':False}
+    (OUT/'control-polar-transfer-negative-summary.json').write_text(json.dumps(negative_summary,indent=2)+'\n')
     print(json.dumps({k:v for k,v in summary.items() if k!='frozen_heldout_ledger'},indent=2))
+    print(json.dumps(negative_summary,indent=2))
 
 
 if __name__=='__main__':
