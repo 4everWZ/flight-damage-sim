@@ -917,6 +917,14 @@ The six unseen-curve observations have maximum absolute predicted-minus-read res
 
 Outputs are separate `control-polar-cr3439-*` JSON/CSV/training records plus `control-polar-calibration-cr3439*` native replay CSVs, retained by the existing control-polar CI job. The default-off 2D runtime remains the frozen PR19 implementation; main is unchanged and PR19 remains draft/unmerged.
 
+## CR-3439 same-load reference translation
+
+The authorized diagnostic retains the existing six training and six held-out points, source conditions, fixed-Mach preparation and normalized unit-area/chord fixture. `python3 tools/control_polar_reference_transfer.py` evaluates the native load once per query, then uses the existing native `Wrench::add` to reduce that identical force and pure couple about quarter chord, leading edge and trailing edge. Only the mathematical moment origin changes. A separate Python vector calculation constructs expectations from the frozen training-grid interpolation, without calling the native reducer. No new polar, geometry, default binding or physical model is introduced.
+
+All **36** comparisons pass the preselected normalized `1e−12` criterion. Maximum force and translated-moment errors are **1.0687e−16**, and pure-couple error is **1.6699e−17**. Actual-angle error and maximum endpoint excess remain **5.5512e−17 rad**, retaining four strict-clamp flags among twelve unique queries. The coefficient CSV matches the retained pre-change output byte-for-byte. Original held-out maximum residuals **.0875/.0095/.0125** and outside-reading-envelope counts **6/3/3** are unchanged. Separately reported translated-moment reading envelopes do not replace those original comparisons or include source angle/systematic uncertainty.
+
+This supports the algebraic same-load reference conversion only. It does not validate physical section-to-cell allocation, source moment handedness, pressure distribution, damage consequences or aircraft calibration. Reused held-outs are regression evidence, not new independent observations. Local evidence lives in ignored `results/control-polar-transfer-*`; original CR-3439/NACA0009 results are preserved. Focused build/run, retained-output comparison and static diff checks cover this addition; completed broad CI was not repeated. No remote write or merge is part of this increment.
+
 ## How decisions change
 
 Record a testable hypothesis, actual result, uncertainty and useful next experiment. Routine reversible implementation choices can proceed; any choice removing or weakening a core requirement must be reported first. Preserve failed evidence when it changes interpretation. Do not turn partial mechanisms, stubs or a rendered aircraft into a claim of full v0.1 completion.

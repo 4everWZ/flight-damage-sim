@@ -6,7 +6,7 @@
 using namespace flight;
 int main(int argc,char **argv) {
   try {
-    if(argc!=5) throw std::runtime_error("airframe mach queries.csv output.csv required");
+    if(argc!=5 && argc!=6) throw std::runtime_error("airframe mach queries.csv output.csv [reference-wrenches.csv] required");
     auto d=Definition::load(argv[1]); double mach=std::stod(argv[2]);
     if(!std::isfinite(mach) || mach<=0) throw std::runtime_error("positive finite Mach required");
     auto found=std::find_if(d.cells.begin(),d.cells.end(),[](const auto &c){return c.id==34;});
@@ -22,6 +22,12 @@ int main(int argc,char **argv) {
     d.engine.running=false; d.engine.engine_friction=0;
     std::ifstream query(argv[3]); std::ofstream out(argv[4]);
     if(!query || !out) throw std::runtime_error("reference file input/output");
+    std::ofstream reference;
+    if(argc==6) {
+      reference.open(argv[5]);
+      if(!reference) throw std::runtime_error("reference wrench output");
+      reference<<std::setprecision(17)<<"alpha_deg,delta_deg,reference,origin_offset_chords,q,area,chord,flow_alpha_rad,delta_eff_rad,clamped,fx,fy,fz,mqx,mqy,mqz,arm_x,arm_y,arm_z,wfx,wfy,wfz,wmx,wmy,wmz\n";
+    }
     std::string line; std::getline(query,line);
     out<<std::setprecision(17)<<"alpha_deg,delta_deg,flow_alpha_rad,delta_eff_rad,command,cl,cd,cm,clamped\n";
     while(std::getline(query,line)) {
@@ -40,6 +46,20 @@ int main(int argc,char **argv) {
       Vec lift=unit(cross(Vec{0,1,0},c.flow)),drag=-unit(c.flow);
       out<<a<<','<<delta<<','<<c.flow_alpha<<','<<c.deflection<<','<<command<<','
          <<dot(c.force,lift)/c.q<<','<<dot(c.force,drag)/c.q<<','<<c.moment.y/c.q<<','<<c.control_polar_clamped<<'\n';
+      if(reference.is_open()) {
+        // Only change the observer's moment origin. The cell position, local
+        // flow, actual hinge angle and evaluated load remain untouched.
+        for(auto [name,offset]: {std::pair{"quarter",0.},std::pair{"leading",.25},std::pair{"trailing",-.75}}) {
+          Vec origin=c.position+Vec{offset*c.chord,0,0};
+          Vec arm=c.position-origin;
+          Wrench wrench; wrench.add(c.force,arm,c.moment);
+          reference<<a<<','<<delta<<','<<name<<','<<offset<<','<<c.q<<','<<c.area<<','<<c.chord<<','
+                   <<c.flow_alpha<<','<<c.deflection<<','<<c.control_polar_clamped;
+          for(Vec v: {c.force,c.moment,arm,wrench.force,wrench.moment})
+            reference<<','<<v.x<<','<<v.y<<','<<v.z;
+          reference<<'\n';
+        }
+      }
     }
   } catch(const std::exception &e) { std::cerr<<e.what()<<'\n'; return 1; }
 }

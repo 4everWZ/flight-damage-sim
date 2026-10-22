@@ -55,6 +55,7 @@ python3 tools/control_polar_calibration.py
 python3 tools/control_polar_measured_subset.py
 python3 tools/control_polar_dense_slice.py
 python3 tools/control_polar_cr3439.py
+python3 tools/control_polar_reference_transfer.py
 python3 tools/propulsion_experiments.py
 python3 tools/rotor_experiments.py
 python3 tools/detachment_experiments.py
@@ -109,7 +110,46 @@ Optional source research, separate from core verification: create `build/referen
 
 ## Next useful experiments
 
-The approved [isolated CR-3439 section reference](../decisions/current-decisions.md#isolated-cr-3439-section-reference) is implemented and locally replayed through the unchanged optional native force kernel. Original graphs established a single open .005c gap series and explicit positive-down deflection. Commit `05ffae7` fixed six training stations and six observations on entirely withheld ±10-degree curves, with reading allowances, before transcription. The dataset retains source conditions, approximate pixel calibration and separate instrumental/systematic uncertainty. CM nose-up is a labeled inference from report load/moment summaries, not an explicit axis statement. Software/operator errors are ≤2.22e−16; four endpoint diagnostic flags represent only 5.56e−17-rad rounding and remain visible. Unseen-curve maximum CL/CD/CM residuals .0875/.0095/.0125 leave 6/3/3 readings outside reading-only envelopes. Preserve those discrepancies and all NACA0009 findings. No runtime/default parameter, WWII/stall calibration or merge is adopted. A further denser/reference-transfer experiment must preselect its meaning before reusing holdouts; current-head CI and review remain the immediate completion checks.
+The approved [isolated CR-3439 section reference](../decisions/current-decisions.md#isolated-cr-3439-section-reference) is implemented and locally replayed through the unchanged optional native force kernel. Original graphs established a single open .005c gap series and explicit positive-down deflection. Commit `05ffae7` fixed six training stations and six observations on entirely withheld ±10-degree curves, with reading allowances, before transcription. The dataset retains source conditions, approximate pixel calibration and separate instrumental/systematic uncertainty. CM nose-up is a labeled inference from report load/moment summaries, not an explicit axis statement. Software/operator errors are ≤2.22e−16; four endpoint diagnostic flags represent only 5.56e−17-rad rounding and remain visible. Unseen-curve maximum CL/CD/CM residuals .0875/.0095/.0125 leave 6/3/3 readings outside reading-only envelopes. Preserve those discrepancies and all NACA0009 findings. No runtime/default parameter, WWII/stall calibration or merge is adopted. A further denser/reference-transfer experiment must preselect its meaning before reusing holdouts.
+
+### CR-3439 reference-transfer diagnostic — completed locally
+
+**Recovered state, 2026-10-22.** Local branch/remote PR19 head: `297a8d69e76745dbb7b28cf3d200f447e4d5a431`. Worktree was clean before this documentation edit. Read-only remote checks confirm PR19 open, ready, unmerged; main remains `f0fa41e3190074b09a15b3cfae67ebb3d7b67eb5`. At 06:39 UTC the parent verified [core CI](https://github.com/4everWZ/flight-damage-sim/actions/runs/39421924482) 9/9, [source CI](https://github.com/4everWZ/flight-damage-sim/actions/runs/39421924421) 1/1 and Codex review with no findings. Recovered local summary matches the [retained numerical evidence](https://github.com/4everWZ/flight-damage-sim/actions/runs/39421924482/artifacts/12263786805); nothing was rerun. Source conditions/deflection signs and the bounded measured subset are qualified to their stated scope. CM handedness remains conditional; physical reference transfer is unverified.
+
+**Purpose (authorized 2026-10-22).** Test whether the existing isolated section force and quarter-chord couple produce the correct wrench about another reference point. Freeze the coefficient predictor. This tests load/reference bookkeeping against an independent calculation, not interpolation improvement or physical section-to-cell accuracy (original spec §§14–15, §50).
+
+**Data split, unchanged.** Use only `data/control-polar-cr3439-section.json`, its fixed conditions/conventions and existing PG preparation. No new geometry, table, transcription or knots.
+
+| Role | Alpha (degrees) | Delta (degrees) |
+|---|---|---|
+| Six training rows | −4, +4 | −20, 0, +20 |
+| Six excluded holdouts | −4, 0, +4 | −10, +10 |
+
+Previously inspected holdouts remain excluded from export/fitting. Reuse is a frozen regression comparison, **not fresh independent validation**; held values cannot choose coefficients, reference points or tolerances.
+
+**Hypothesis and matrix.** Preserve the existing normalized unit-area/chord cell, physical location, uniform flow, zero angular rate and actual fixture control-chain settling. For each of twelve queries, observe its unchanged load about quarter chord `Q`, leading edge `R_LE = Q + .25*c*e_chord`, and trailing edge `R_TE = Q − .75*c*e_chord`: 36 wrench comparisons. Native +X points forward. These are mathematical moment origins, not new geometry, shifted aerodynamic centers or calibrated aircraft CGs.
+
+```text
+F = q*A*(CL*e_lift + CD*e_drag)
+M_Q = q*A*c*CM*e_span
+M_R = M_Q + (Q − R) cross F
+```
+
+The diagnostic probe now optionally exports actual native cell force, pure couple and `Wrench::add` result at each origin. Independent Python expectations use frozen-grid interpolation and these equations, without the native reducer. The previous coefficient-only CSV did not test a nonzero reference arm; this addition exercises native reduction rather than only transforming that CSV in Python.
+
+**Transfer boundary.** CR-3439 describes the whole section. The normalized cell is an operator surrogate. Applying its polar to existing trailing-wing cells assumes an unsupported chordwise allocation and risks double counting. Integrated CL/CD/CM do not identify pressure distribution, local skin-loss consequences or damaged control authority. This round stops at reference translation. Later physical mapping needs area/chord/reference locations, conservative force/couple allocation and independent local-loss evidence; no production binding, subdivision or damage law is selected here.
+
+**Criteria.** Retain existing coefficient/operator and actual-angle tolerances `1e−12` (angles in radians). Preselect normalized force error `abs(dF)/(q*A)` and moment error `abs(dM)/(q*A*c)` ≤ `1e−12` per component. Wrong arm sign, duplicate CM, meaningful extrapolation or missed mechanical angle is an implementation failure; investigate without retuning data. Preserve raw endpoint clamp flags and quantified excess.
+
+Keep the measured ledger: maximum CL/CD/CM residuals `.0875/.0095/.0125`, `6/3/3` beyond unchanged reading-only envelopes `.05/.004/.010`. These remain discrepancies, not total physical pass/fail tolerances. A translated moment gets a separately labeled propagated reading envelope: for `s = dot(Q−R,e_chord)/c`, `CM_R = CM_Q + s*(CL*cos(alpha)+CD*sin(alpha))`, and `b_R = b_CM + abs(s)*(abs(cos(alpha))*b_CL+abs(sin(alpha))*b_CD)`. It cannot replace the original CM result. Source angle/systematic uncertainty and inferred CM sign remain separate.
+
+**Local result.** `python3 tools/control_polar_reference_transfer.py` builds the existing diagnostic probe and runs exactly 12 queries × three reference origins. All 36 comparisons pass the preselected `1e−12` normalized tolerances. Worst force error is `1.0686931437748433e−16` (train alpha +4/delta 0, quarter origin, Z); pure-couple error is `1.6698330371481926e−17` (held alpha −4/delta −10, quarter origin, Y); translated-moment error is `1.0686931437748433e−16` (train alpha +4/delta 0, trailing origin, Y). Actual-angle error and maximum boundary excess remain `5.551115123125783e−17` rad, with four flagged unique queries. Native force/pure couple are unchanged across the three observers. The new coefficient CSV is byte-identical to the retained pre-change 12-query CSV; frozen residual maxima and outside counts match the old summary exactly.
+
+New ignored outputs are `results/control-polar-transfer-summary.json`, `control-polar-transfer-comparisons.csv`, `control-polar-transfer-native.csv`, `control-polar-transfer-coefficients.csv` and `control-polar-transfer-queries.csv`. The existing probe accepts an optional fifth output argument for native wrenches; its original coefficient output format is unchanged. Only this focused run, the retained-output comparison, Python compilation and diff review were performed; old CI was not rerun and covers remote head `297a8d6`, not this addition.
+
+**Interpretation and next boundary.** Same-load algebraic reference translation is supported. Physical section-to-cell mapping, source CM handedness and interpolation accuracy are not established by this pass. All old failure evidence, NACA0009 data, defaults and geometry remain intact. Denser fitting, physical cell allocation or new calibration needs its own defined experiment; none is adopted. Implementation is retained in a local feature-branch commit, with no push, PR comment/body update or merge. No new physical assumption or execution blocker was encountered.
+
+### Other continuing prototype work
 
 1. Finite-span/induced-flow reference is now measured independently. Next test an explicitly new opt-in section-data fixture and strip/cell load boundary, preserving real controls/structure; surface data meaning before any production adoption. Then prioritize local stall validation and calibrated propeller effects. The reference excludes arbitrary perforations, transient/stalled wakes and live 120 Hz cost. Clock experiments are finished: preserve the original failed 10% hypothesis and unresolved sampled-production versus continuous-limit interpretation; no new clock patch is selected.
 2. Calibrate and extend the signed prop boundary before historical or transonic performance claims: independent blade/engine data, compressibility/tip/swirl/Re limits and shutdown/feathering damage. Numerical signed power balance, finite pitch governance and rotor/body flight ledgers now pass; this does not validate the synthetic airframe. Preserve the legacy three failed hypotheses. Broaden physically useful speed/load cases rather than tuning away those failures. Detailed sources/equations/measurements belong in [current decisions](../decisions/current-decisions.md).
