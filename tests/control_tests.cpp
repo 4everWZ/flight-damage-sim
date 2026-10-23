@@ -12,6 +12,77 @@ void hold_guidance(Simulation &s) {
   s.guidance.path_gain = 0;
   s.guidance.normal_gain = 0;
 }
+struct AvailabilityCheck {
+  int cases = 0, immobile = 0;
+  double frozen_drift = 0, moving_error = 0, immobile_motion = 0;
+};
+AvailabilityCheck control_availability(const Definition &d) {
+  // Held sensor states isolate the PI/hardware boundary, not a flight model.
+  // Zero slew is already an immobile runtime state in advance_surface.
+  AvailabilityCheck check;
+  constexpr std::array<double,3> ki{.8,1.2,.5};
+  for (int hz : {120,240}) for (int axis=0; axis<3; ++axis)
+    for (double sign : {-1.,1.}) for (int kind=0; kind<3; ++kind) {
+      Simulation s(d,1./hz); hold_guidance(s);
+      std::vector<std::size_t> branches;
+      for (std::size_t i=0; i<s.def.chains.size(); ++i)
+        if (s.def.chains[i].axis==axis) {
+          branches.push_back(i);
+          s.def.chains[i].slew = kind==2 ? 1e-9 : 0;
+        }
+      require(!branches.empty(),"availability bench needs an existing branch");
+      if (kind==1) // One surviving branch is enough, even on a shared axis.
+        s.def.chains[branches.back()].slew=d.chains[branches.back()].slew;
+      double initial=sign*.2;
+      s.instructor.rate_bias[axis]=initial;
+      s.body.omega[axis]=-sign*.02;
+      PilotIntent p; p.mouse=true;
+      for (int tick=0; tick<hz; ++tick) s.update_controls(p);
+      ++check.cases;
+      if (kind==0) {
+        ++check.immobile;
+        check.frozen_drift=std::max(check.frozen_drift,
+                                  std::abs(s.instructor.rate_bias[axis]-initial));
+        for (auto id:branches)
+          check.immobile_motion=std::max(check.immobile_motion,
+              std::max(std::abs(s.def.chains[id].deflection),
+                       std::abs(s.def.chains[id].midpoint_deflection)));
+        require(s.instructor.integral_paused[axis] && check.frozen_drift==0,
+                "immobile control chains must freeze Instructor PI bias");
+        require(check.immobile_motion==0,"zero-slew surfaces remain immobile");
+        p.active[axis]=true; p.direct[axis]=sign;
+        s.update_controls(p);
+        require(s.ownership[axis].command==sign && s.ownership[axis].direct_weight==1,
+                "immobile hardware does not dilute keyboard ownership");
+        p.active[axis]=false; s.update_controls(p);
+        require(s.ownership[axis].command==sign,
+                "release retains request continuity on immobile hardware");
+        for (int tick=0; tick<=int(d.handoff*hz); ++tick) s.update_controls(p);
+        require(s.ownership[axis].direct_weight==0 && s.instructor.rate_bias[axis]==initial,
+                "unavailable PI stays frozen after handoff ends");
+        // A bench counterfactual, not a gameplay repair feature: the next
+        // available sample resumes the old bias with the ordinary increment.
+        s.def.chains[branches.back()].slew=d.chains[branches.back()].slew;
+        s.update_controls(p);
+        require(!s.instructor.integral_paused[axis] &&
+                    std::abs(s.def.chains[branches.back()].deflection)>0 &&
+                    std::abs(s.instructor.rate_bias[axis]-(initial+sign*ki[axis]*.02/hz))<1e-14,
+                "a surviving movable branch resumes PI without resetting bias");
+      } else {
+        double expected=initial+sign*ki[axis]*.02;
+        check.moving_error=std::max(check.moving_error,
+                                   std::abs(s.instructor.rate_bias[axis]-expected));
+        require(!s.instructor.integral_paused[axis] && check.moving_error<1e-13,
+                "one movable branch or strictly positive slew retains ordinary PI");
+        require(std::abs(s.def.chains[branches.back()].deflection)>0,
+                "positive slew has nonzero actual surface response");
+      }
+      for (int other=0; other<3; ++other) if (other!=axis)
+        require(s.ownership[other].direct_weight==0 && s.instructor.rate_bias[other]==0,
+                "availability and direct ownership remain per-axis");
+    }
+  return check;
+}
 void path_load_projection(const Definition &d) {
   // Controlled sensor states, not prescribed flight motion. A balanced total
   // force must produce zero path-normal error regardless of body/flow axes or
@@ -151,6 +222,7 @@ int main(int argc, char **argv) {
     if (argc != 2)
       throw std::runtime_error("airframe required");
     auto d = Definition::load(argv[1]);
+    auto availability = control_availability(d);
     path_load_projection(d);
     moving_aim(d);
     const std::array<double, 3> kp{.9, 1.4, 1.}, ki{.8, 1.2, .5};
@@ -228,6 +300,12 @@ int main(int argc, char **argv) {
     std::cout << std::setprecision(13)
               << "{\"checks_passed\":true,\"max_boundary_overshoot\":" << worst
               << ",\"held_error_bias_dt_spread\":" << spread
+              << ",\"availability_cases\":" << availability.cases
+              << ",\"availability_rates_hz\":[120,240]"
+              << ",\"immobile_cases\":" << availability.immobile
+              << ",\"max_immobile_bias_drift\":" << availability.frozen_drift
+              << ",\"max_moving_bias_error\":" << availability.moving_error
+              << ",\"max_immobile_surface_motion_rad\":" << availability.immobile_motion
               << ",\"rates_hz\":[60,120,240,480]}\n";
   } catch (const std::exception &e) {
     std::cerr << "FAIL: " << e.what() << '\n';

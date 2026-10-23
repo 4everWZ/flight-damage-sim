@@ -619,7 +619,10 @@ void Simulation::update_controls(const PilotIntent &p) {
     for (std::size_t id = 0; id < def.chains.size(); ++id) {
       const auto &chain = def.chains[id];
       if (chain.axis == axis && chain.connected && !chain.jammed &&
-          chain.range > 0 && chain.hinge > 0) {
+          chain.range > 0 && chain.hinge > 0 && chain.slew > 0) {
+        // A runtime-immobilized chain cannot respond to any new PI request.
+        // Keep the same exact zero boundary as advance_surface; this is not
+        // an aerodynamic authority estimate or a practical rate threshold.
         for (const auto &cell : def.cells)
           if (cell.chain == int(id) && cell.attached && cell.area_fraction > 0)
             available = true;
