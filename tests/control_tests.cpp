@@ -83,6 +83,129 @@ AvailabilityCheck control_availability(const Definition &d) {
     }
   return check;
 }
+struct AvailabilityTransitions {
+  int cases = 0, resets = 0, resumed = 0;
+  double bias_error = 0, frozen_motion = 0, slew_excess = 0, weight_error = 0;
+};
+AvailabilityTransitions availability_transitions(const Definition &d) {
+  AvailabilityTransitions check;
+  constexpr std::array<double,3> ki{.8,1.2,.5};
+  for (int hz:{120,240}) for (int axis=0; axis<3; ++axis)
+    for (double sign:{-1.,1.}) for (bool negative_zero:{false,true}) {
+      Simulation s(d,1./hz); hold_guidance(s);
+      s.body.omega={-.01,.015,-.012};
+      s.body.omega[axis]=-sign*.02;
+      s.instructor.rate_bias={.1,-.11,.12};
+      s.instructor.rate_bias[axis]=sign*.2;
+      std::vector<std::size_t> branches;
+      for (std::size_t id=0; id<s.def.chains.size(); ++id)
+        if (s.def.chains[id].axis==axis) {
+          branches.push_back(id);
+          s.def.chains[id].lag=.15; s.def.chains[id].friction=4;
+        }
+      require(!branches.empty(),"transition bench needs an existing branch");
+      PilotIntent p; p.mouse=true;
+      for (int tick=0; tick<hz/4; ++tick) s.update_controls(p);
+      std::vector<double> held;
+      for (auto id:branches) {
+        held.push_back(s.def.chains[id].deflection);
+        require(held.back()!=0 && s.def.chains[id].filtered!=0,
+                "fault starts from actual nonzero actuator/filter history");
+        s.def.chains[id].slew=negative_zero ? -0. : 0.;
+      }
+      // Change held error sign and pressure after immobilization. No surface
+      // position or filter is assigned; only runtime hardware state changes.
+      s.body.omega[axis]=sign*.02;
+      s.body.velocity={140,0,0};
+      auto restored=branches[negative_zero ? branches.size()-1 : 0];
+      bool recovered=false, resumed=false;
+      auto advance=[&] {
+        auto bias=s.instructor.rate_bias;
+        double old_weight=s.ownership[axis].direct_weight;
+        std::vector<double> before;
+        for (auto id:branches) before.push_back(s.def.chains[id].deflection);
+        s.update_controls(p);
+        require(norm(s.instructor.desired_rates)<1e-14,
+                "held sensor bench keeps a known zero rate target");
+        for (int a=0; a<3; ++a) {
+          bool pause=a==axis && (!recovered || p.active[a] || old_weight>.01);
+          double expected=bias[a]+(pause ? 0 : -ki[a]*s.body.omega[a]*s.dt);
+          double error=std::abs(s.instructor.rate_bias[a]-expected);
+          check.bias_error=std::max(check.bias_error,error);
+          require(error<1e-14 && s.instructor.integral_paused[a]==pause,
+                  "transition preserves exact PI pause policy and other-axis integration");
+          if (a!=axis) require(s.ownership[a].direct_weight==0,
+                               "fault/recovery never takes ownership of another axis");
+          if (a==axis && !pause) resumed=true;
+        }
+        double q=.5*s.density*dot(s.body.velocity,s.body.velocity);
+        for (std::size_t n=0; n<branches.size(); ++n) {
+          auto id=branches[n]; const auto &c=s.def.chains[id];
+          if (!recovered || id!=restored) {
+            double motion=std::max(std::abs(c.deflection-held[n]),
+                                   std::abs(c.midpoint_deflection-held[n]));
+            check.frozen_motion=std::max(check.frozen_motion,motion);
+            require(motion==0,"zero-slew branch retains its captured nonzero angle");
+          } else {
+            double rate=c.slew/(1+q/c.q_limit)/(1+c.friction);
+            double excess=std::max({0.,std::abs(c.deflection-before[n])-rate*s.dt,
+                                    std::abs(c.midpoint_deflection-before[n])-rate*s.dt/2});
+            check.slew_excess=std::max(check.slew_excess,excess);
+            require(excess<1e-14,"recovery cannot snap endpoint or midpoint beyond actual slew");
+          }
+        }
+      };
+      for (int tick=0; tick<hz/8; ++tick) advance();
+      p.active[axis]=true; p.direct[axis]=-sign; advance();
+      require(s.ownership[axis].command==-sign && s.ownership[axis].direct_weight==1,
+              "nonzero-angle immobilization retains full direct request authority");
+      p.active[axis]=false;
+      int release_tick=0;
+      auto release=[&] {
+        advance();
+        double t=std::min(1.,release_tick++*s.dt/d.handoff);
+        double expected=1-t*t*(3-2*t);
+        check.weight_error=std::max(check.weight_error,
+                                   std::abs(s.ownership[axis].direct_weight-expected));
+        require(check.weight_error<1e-14,"hardware transition preserves handoff timing");
+      };
+      release();
+      require(s.ownership[axis].command==-sign,"first release sample is continuous");
+      for (int tick=0; tick<int(d.handoff*hz/2); ++tick) release();
+      require(s.ownership[axis].direct_weight>.01,"restore hardware inside active handoff");
+      s.def.chains[restored].slew=d.chains[restored].slew; recovered=true;
+      for (int tick=0; tick<=int(d.handoff*hz/2)+2; ++tick) release();
+      require(resumed && s.ownership[axis].direct_weight==0,
+              "PI resumes from retained state after the existing ownership gate permits it");
+      require(s.def.chains[restored].deflection!=held[negative_zero ? held.size()-1 : 0],
+              "restored branch has actual physical motion");
+      ++check.cases; ++check.resumed;
+      for (auto id:branches) s.def.chains[id].slew=0;
+      auto bias=s.instructor.rate_bias;
+      p.mouse=false; s.update_controls(p);
+      require(s.instructor.rate_bias==bias,"inactive mouse preserves existing PI memory policy");
+      p.mouse=true;
+      for (int reason=0; reason<3; ++reason) {
+        auto reset=s;
+        if (reason==0) reset.instructor_mode=InstructorMode::Off;
+        if (reason==1) reset.instructor_mode=InstructorMode::Legacy;
+        if (reason==2) reset.guidance.rate_integral=false;
+        reset.update_controls(p);
+        require(reset.instructor.rate_bias==std::array<double,3>{},
+                "mode/PI disable still clears stale biases despite zero-slew pause");
+        reset.instructor_mode=InstructorMode::FlightPath; reset.guidance.rate_integral=true;
+        reset.update_controls(p);
+        for (int a=0; a<3; ++a) {
+          double expected=a==axis ? 0 : -ki[a]*reset.body.omega[a]*reset.dt;
+          require(std::abs(reset.instructor.rate_bias[a]-expected)<1e-14 &&
+                      reset.instructor.integral_paused[a]==(a==axis),
+                  "reactivation does not resurrect cleared bias or freeze healthy axes");
+        }
+        ++check.resets;
+      }
+    }
+  return check;
+}
 void path_load_projection(const Definition &d) {
   // Controlled sensor states, not prescribed flight motion. A balanced total
   // force must produce zero path-normal error regardless of body/flow axes or
@@ -223,6 +346,7 @@ int main(int argc, char **argv) {
       throw std::runtime_error("airframe required");
     auto d = Definition::load(argv[1]);
     auto availability = control_availability(d);
+    auto transitions = availability_transitions(d);
     path_load_projection(d);
     moving_aim(d);
     const std::array<double, 3> kp{.9, 1.4, 1.}, ki{.8, 1.2, .5};
@@ -306,6 +430,13 @@ int main(int argc, char **argv) {
               << ",\"max_immobile_bias_drift\":" << availability.frozen_drift
               << ",\"max_moving_bias_error\":" << availability.moving_error
               << ",\"max_immobile_surface_motion_rad\":" << availability.immobile_motion
+              << ",\"availability_transition_cases\":" << transitions.cases
+              << ",\"availability_state_reset_cases\":" << transitions.resets
+              << ",\"availability_resumed_cases\":" << transitions.resumed
+              << ",\"max_transition_bias_error\":" << transitions.bias_error
+              << ",\"max_captured_angle_motion_rad\":" << transitions.frozen_motion
+              << ",\"max_recovery_slew_excess_rad\":" << transitions.slew_excess
+              << ",\"max_transition_handoff_weight_error\":" << transitions.weight_error
               << ",\"rates_hz\":[60,120,240,480]}\n";
   } catch (const std::exception &e) {
     std::cerr << "FAIL: " << e.what() << '\n';
