@@ -146,7 +146,7 @@ python3 tools/rotor_experiments.py
 
 尚缺或仍为 reduced／未标定模型：局部材料去除的质量账本、真实跨翼展梁／剪切／轴向载荷与材料断裂标定、脱离部件二次断裂／部件间气流、动态失速／下洗／襟翼、桨叶压缩性／tip／swirl／Re 修正、历史飞机数据、顺桨及更完整发动机／系统损坏。碰撞、弹道／爆炸／火灾、多机型、成品天空地形／镜头和真人 GUI 手感不属于已完成结果。
 
-用户已在桌面修正并授权合并 PR #1，随后恢复有界核心迭代。上述人工操控检查仍独立于自动物理证据；继续核心研发不代表完整游戏或历史拟真已验收。
+PR #1 的查看器修正已集成。上述人工操控检查仍独立于自动物理证据；继续核心研发不代表完整游戏或历史拟真已验收。
 
 脱离部件现在按自身 cells／CG／速度／角速度计算气动力并积分，控制分支失去驾驶员连接，机械卡死保留或按中立回落；当前 viewer 仍只绘制母体。需要诊断时可读取 live JSON 的新增 `detached` 数组（各部件 pose、气动力／矩、舵面连接、cell 气流与载荷），或运行 `python tools/detachment_experiments.py` 并用 `plot_results.py` 查看 `detached-flight.png`。后者包含同初态弹道对照，属于离线实验，不是人工操控验收。
 
@@ -156,4 +156,4 @@ python3 tools/rotor_experiments.py
 
 该事件不自动改气动面积、梁截面或连接，也不施加爆炸冲量。当前没有新增材料 GUI 快捷键，viewer 也不绘制碎料几何。复现核心实验使用 `.venv-viewer/bin/python tools/material_experiments.py`（Windows 对应虚拟环境的 `Scripts/python.exe`），结果为 `results/material-summary.json`。质量／动量／瞬时能量与固定配平响应有通过证据；强滚转闭环的小材料效应在 120/240 Hz 的 10% 一致性假设失败，报告会保留此限制。
 
-核心 rate PI 的积分增量现按归一化输出剩余空间截断，避免跨饱和一步保存不可实现的偏置；键位、aim 语义与实际舵面限制不变。`.venv-viewer/bin/python tools/control_experiments.py` 生成 `control-summary.json` 和 `control-sensitivity.csv`，区分通过的积分边界检查与仍失败的强滚转小材料效应假设。用户已授权无需人工验证的有界核心改动经物理审查和检查后自动合并；这不等同于新增真人手感验收。
+核心 rate PI 的积分增量现按归一化输出剩余空间截断，避免跨饱和一步保存不可实现的偏置；键位、aim 语义与实际舵面限制不变。`.venv-viewer/bin/python tools/control_experiments.py` 生成 `control-summary.json` 和 `control-sensitivity.csv`，区分通过的积分边界检查与仍失败的强滚转小材料效应假设。核心改动的物理审查和自动检查不等同于真人手感验收。

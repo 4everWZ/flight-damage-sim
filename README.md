@@ -64,7 +64,7 @@ MPLBACKEND=TkAgg .venv-viewer/bin/python tools/viewer.py  # desktop Python with 
 
 On Windows PowerShell, follow the [native startup commands](docs/viewer-operations.md#windows-powershell), which build the viewer with MinGW `g++` and use `.venv-viewer/Scripts/python.exe`. The bash commands above are not PowerShell commands. The same manual includes expected observations for each desktop check and the full automated regression sequence for a bash/GNU make environment.
 
-The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. The user merged the reviewed slice and resumed bounded core iterations. Desktop handling checks remain separate from automatic physics evidence.
+The default is the signed prop variant; use `--airframe validation.airframe` for legacy propulsion and `--controller legacy` / `--controller off` for guidance comparisons. Aim elevation requests air-relative flight-path angle. Desktop handling checks remain separate from automatic physics evidence.
 
 ## Minimal integration boundary
 
@@ -97,7 +97,7 @@ A batch contains 0–120 fixed ticks. Damage applies at the current tick boundar
 
 The independent mechanics review found and repaired torque-free rotation drift, flexed-wing lift work, initial handoff ownership and damaged trim bypass. New PI guidance reduces this fixture's 90° turn minimum height loss from ~41 m to ~19 m and final loss from ~32 m to ~0.2 m. This is a synthetic case; transient loss and damaged/energy-limited behavior remain. Raw trim residuals, failed hypotheses and comparative trajectories are documented below. The signed prop model produces stopped-blade drag, wind-driven startup and speed-dependent load; a finite pitch governor ends near 1600.36 RPM for a 1600 RPM target, while jam/travel damage retain real overspeed. Six flight cases close the discrete energy/world-torque-impulse ledgers. The old propulsion variant retains its failed stopped-prop/windmilling/load hypotheses. All prop values are synthetic, with no compressibility/tip/swirl correction; overspeed cases do not validate transonic behavior. The CI workflow runs the same reproducible entrypoints.
 
-The optional `data/validation-material.airframe` discretizes the same body's outer-wing mass into named material elements, preserving initial mass/CG/inertia. `damage material left_outer_forward .2` leaves 20% of that element and transfers the removed 8 kg into a separately integrated passive body. Owner mass/CG/full inertia and inertial loads update, with total mass/P/H/instant energy checks. This does not implicitly change aero area or spar section. Material particles have no aero geometry; carriers remain non-removable. The current full-roll small-effect timestep hypothesis failed and is reported separately from passing fixed-trim and conservation checks. PR #2/#3 were reviewed and merged under the user's standing authorization for automatically verified core work.
+The optional `data/validation-material.airframe` discretizes the same body's outer-wing mass into named material elements, preserving initial mass/CG/inertia. `damage material left_outer_forward .2` leaves 20% of that element and transfers the removed 8 kg into a separately integrated passive body. Owner mass/CG/full inertia and inertial loads update, with total mass/P/H/instant energy checks. This does not implicitly change aero area or spar section. Material particles have no aero geometry; carriers remain non-removable. The current full-roll small-effect timestep hypothesis failed and is reported separately from passing fixed-trim and conservation checks. PR #2/#3 are integrated; their physical claims and verification limits remain recorded in current decisions.
 
 Rate PI now limits integration to remaining normalized-command headroom within each tick, avoiding stored bias beyond a saturation crossing. Positive/negative three-axis controller benches agree at 60–480 Hz. This does not yet resolve the full-roll small-material-effect timestep hypothesis; its failed result and load-feedback ablation remain reported. Gains, input semantics and actual actuator limits are unchanged.
 
@@ -108,8 +108,7 @@ An airframe may add an optional `cell_basis <cell_id> <qw> <qx> <qy> <qz>` recor
 - [Viewer operations and review milestone](docs/viewer-operations.md)
 - [Current decisions, measured evidence and limitations](docs/decisions/current-decisions.md)
 - [Implementation plan, original acceptance mapping and next experiments](docs/plans/codex-cloud-first-iteration.md)
-- [Unchanged recovered 51-section specification](docs/spec/flight-sim-core-v0.1.original.md)
-- [Original user requirements](docs/sources/user-requirements.md)
+- [Original 51-section engineering specification](docs/spec/flight-sim-core-v0.1.original.md)
 - [Backend/viewer research](docs/research/engine-options-research.md)
 - [Repository-local APEX installation](.agents/skills/README.md)
 

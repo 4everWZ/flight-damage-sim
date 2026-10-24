@@ -4,9 +4,9 @@ Date: 2026-10-14. Status: documentation-based recommendation; no simulation was 
 
 ## Outcome
 
-Created and verified the private repository [4everWZ/flight-damage-sim](https://github.com/4everWZ/flight-damage-sim), default branch `main`, initially containing only `README.md`. No project license was selected. A name/description check of all 70 pre-existing owner repositories found no flight/simulator/War Thunder/IL2 candidate.
+Repository: [4everWZ/flight-damage-sim](https://github.com/4everWZ/flight-damage-sim), default branch `main`. No project distribution license has been selected.
 
-The original [FlightLab v0.1 specification](https://chatgpt.com/c/8c79d2da-f148-8328-b951-93766a55c0cd?messageId=83e5c30d-f0ce-4700-9449-9095619ddfbc) was recovered separately and read in full. Preserve it unchanged as a historical engineering baseline. A separate current-decision document should record that the latest user request opens the implementation choice to C++/Python and asks for core-first Codex Cloud development with later integration into an existing visualization/control tool. This must not silently erase its control, aerodynamic, or damage requirements.
+The original [FlightLab v0.1 specification](../spec/flight-sim-core-v0.1.original.md) is the historical engineering baseline. The implementation uses C++/Python for core-first Codex Cloud development, followed by an existing visualization/control tool; [current decisions](../decisions/current-decisions.md) record the rationale while preserving the control, aerodynamic and damage requirements.
 
 ## Recommendation
 
@@ -79,6 +79,6 @@ Keep the core at 120 Hz while the viewer receives snapshots at an independently 
 
 Each iteration should state the hypothesis, changed model/data, scenario, measurements, uncertainty, conclusion, and next discriminating experiment. Keep checks tied to physics and player control, rather than generating unrelated process gates. A failed experiment should guide the next model correction; passing a smoke test must not be represented as validation of the complete original specification.
 
-## Cloud launch blocker and smallest next step
+## Cloud development environment
 
-At handoff time no saved coding environment matched this new repository. Do not use an unrelated PhD, research, or other-project environment. The supported environment-creation entry is [Create a cloud environment](https://chatgpt.com/cloud-environments/new), opened on web or desktop. The user should select `4everWZ/flight-damage-sim` and create its environment; the available environments can then be refreshed and the engineering task launched with the returned configuration ID. Do not claim that task execution has started until creation is confirmed.
+Development and testing run in the Codex Cloud environment configured for `4everWZ/flight-damage-sim`. Keep repository-local dependencies and this project workspace separate from unrelated projects. The owned C++ core and Python experiment entry points are documented in the implementation plan.
