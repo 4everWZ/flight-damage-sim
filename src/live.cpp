@@ -4,6 +4,14 @@
 #include <sstream>
 using namespace flight;
 namespace {
+void control_polar_metadata(const AeroCell &c) {
+  if (!c.control_polar.empty())
+    std::cout << ",\"control_polar\":" << std::quoted(c.control_polar)
+              << ",\"flow_alpha\":" << c.flow_alpha
+              << ",\"delta_eff\":" << c.deflection
+              << ",\"control_polar_clamped\":" << (c.control_polar_clamped ? "true" : "false")
+              << ",\"stall_diagnostic\":\"legacy_effective_alpha_15deg\"";
+}
 void vec(Vec v) { std::cout << '[' << v.x << ',' << v.y << ',' << v.z << ']'; }
 void snapshot(const Simulation &s, const PilotIntent &p) {
   const char *mode = s.instructor_mode == InstructorMode::Off      ? "off"
@@ -101,7 +109,9 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
     std::cout << ",\"attached\":" << (c.attached ? "true" : "false")
               << ",\"area_fraction\":" << c.area_fraction
               << ",\"alpha\":" << c.alpha << ",\"q\":" << c.q
-              << ",\"stall\":" << c.stall << '}';
+              << ",\"stall\":" << c.stall;
+    control_polar_metadata(c);
+    std::cout << '}';
   }
   std::cout << "],\"edges\":[";
   for (std::size_t i = 0; i < s.def.edges.size(); ++i) {
@@ -159,7 +169,9 @@ void snapshot(const Simulation &s, const PilotIntent &p) {
       std::cout << ",\"force\":";
       vec(c.force);
       std::cout << ",\"alpha\":" << c.alpha << ",\"q\":" << c.q
-                << ",\"deflection\":" << c.deflection << '}';
+                << ",\"deflection\":" << c.deflection;
+      control_polar_metadata(c);
+      std::cout << '}';
     }
     std::cout << "]}";
   }

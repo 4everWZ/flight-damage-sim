@@ -1,0 +1,414 @@
+{
+  "name": "cr3439-ms0313-isolated-low-angle-aileron-reference",
+  "evidence_kind": "measurement",
+  "source": {
+    "report": "NASA CR-3439 (1981), figure 5(a/b/c), printed pp.27-29",
+    "url": "https://ntrs.nasa.gov/api/citations/19830008016/downloads/19830008016.pdf",
+    "pdf_pages_1based": {
+      "geometry": 18,
+      "lift": 31,
+      "drag": 32,
+      "moment": 33
+    },
+    "conditions_pdf_pages_1based": [
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "source_run": 39420116219,
+    "source_artifact": 12262539203,
+    "reading_kind": "Manual readings/interpolations of connected measured curves; not raw balance readings or reported numerical table entries."
+  },
+  "conditions": {
+    "airfoil": "NASA MS(1)-0313",
+    "geometry_role": "whole_airfoil_section",
+    "flap_chord_ratio": 0.2,
+    "mach": 0.13,
+    "reynolds": 2200000,
+    "transition": "2.5 mm #80 carborundum strips: upper x/c=.05, lower x/c=.10",
+    "flap_gap": "open leading-edge nose gap .005c; figure 1(b)/5 single series",
+    "delta_positive": "trailing_edge_down",
+    "moment_reference_x_over_c": 0.25,
+    "moment_positive": "nose_up",
+    "coefficient_axes": "lift_normal_to_freestream_drag_against_freestream",
+    "lift_mach_basis": "already_conditioned",
+    "configuration": {
+      "control": "20 percent chord aileron",
+      "other_devices": "aileron-only figure 5, not slotted-flap/spoiler series",
+      "source_chord_m": 0.61,
+      "source_span_m": 0.914
+    }
+  },
+  "conventions": {
+    "delta": "Figure 5 inset explicitly labels positive down and negative up; all three panels use signed numeric delta legend.",
+    "gap": "Figure 5 inset labels .005c Gap; no sealed/shaded alternative series is declared here. Do not inherit CR-3081 legend conventions.",
+    "cm_mapping": "CM_native = CM_report for the matched horizontal quarter-chord convention. Nose-up sense is inferred, not an explicit moment-axis arrow in CR-3439: figure 12(a), PDF68, reports positive upward forward-section normal loads with negative moments about its leading edge; positive-down aileron curves also decrease CM. Native FRD +Y is nose up. This is a convention inference, not independent physical moment validation.",
+    "cm_inference_crosscheck_url": "https://ntrs.nasa.gov/api/citations/19830008016/downloads/19830008016.pdf#page=68",
+    "native_cm_multiplier": 1
+  },
+  "preselection": {
+    "commit": "05ffae7",
+    "training_alpha_deg": [
+      -4,
+      4
+    ],
+    "training_delta_deg": [
+      -20,
+      0,
+      20
+    ],
+    "heldout_alpha_deg": [
+      -4,
+      0,
+      4
+    ],
+    "heldout_entire_delta_curves_deg": [
+      -10,
+      10
+    ],
+    "rule": "Fixed after original graph coverage/sign review and before coefficient transcription. Held curves never enter export, fitting or normalization."
+  },
+  "uncertainty": {
+    "coefficient_reading_halfwidth": {
+      "cl": 0.025,
+      "cd": 0.002,
+      "cm": 0.005
+    },
+    "reading_scope": "Preselected manual digitization allowances include grid/line width, rounded anchors, slight scan skew and locating CD/CM at the uncertain CL read in panel (a). No statistical confidence, exhaustive bound or physical acceptance tolerance.",
+    "instrument_resolution_not_total_error": {
+      "cl": 0.001,
+      "cd_wake": 9e-05,
+      "cd_balance": 0.0003,
+      "cm": 0.0003,
+      "alpha_deg": 0.05,
+      "delta_deg": 0.5
+    },
+    "systematics": "Same tunnel, corrected/connected curves and shared transition/gap/angle settings; errors are correlated. CR-3439 references CR-3081 for corrections. Drag method/tare and tunnel corrections are not quantified as a total error here; nominal Re/M are fixed source conditions, not extra runtime axes. No fabricated combined confidence interval."
+  },
+  "scan_calibration": {
+    "dpi": 300,
+    "original_size_px": [
+      2542,
+      3300
+    ],
+    "lift": {
+      "pdf_page": 31,
+      "transform": "none",
+      "alpha_zero_x_px": 1024,
+      "alpha_pixels_per_deg": 50,
+      "zero_y_px": 1471,
+      "zero_line_reference_x_px": 1024,
+      "zero_line_dy_per_dx": 0.004,
+      "pixels_per_unit": 500
+    },
+    "drag": {
+      "pdf_page": 32,
+      "transform": "none",
+      "cl_zero_x_px": 1035,
+      "cl_pixels_per_unit": 500,
+      "zero_y_px": 2575,
+      "zero_line_reference_x_px": 1035,
+      "zero_line_dy_per_dx": -0.009,
+      "pixels_per_unit": 5000
+    },
+    "moment": {
+      "pdf_page": 33,
+      "transform": "rotate clockwise 90 degrees, expand; size 3300x2542",
+      "cl_zero_x_px": 1696,
+      "cl_pixels_per_unit": 500,
+      "zero_y_px": 978,
+      "zero_line_reference_x_px": 1696,
+      "zero_line_dy_per_dx": 0.003,
+      "pixels_per_unit": 2000
+    },
+    "note": "Approximate local grid anchors, used to trace manual reads within the declared allowances; not an automated curve detector."
+  },
+  "rows": [
+    {
+      "id": "train-a-4-d-20",
+      "role": "train",
+      "alpha_deg": -4,
+      "delta_deg": -20,
+      "cl": -0.89,
+      "cd": 0.018,
+      "cm": 0.096,
+      "pixels": {
+        "lift": [
+          824,
+          1917
+        ],
+        "drag": [
+          590,
+          2486
+        ],
+        "moment": [
+          1251,
+          787
+        ]
+      }
+    },
+    {
+      "id": "train-a4-d-20",
+      "role": "train",
+      "alpha_deg": 4,
+      "delta_deg": -20,
+      "cl": -0.12,
+      "cd": 0.025,
+      "cm": 0.1,
+      "pixels": {
+        "lift": [
+          1224,
+          1532
+        ],
+        "drag": [
+          975,
+          2453
+        ],
+        "moment": [
+          1636,
+          779
+        ]
+      }
+    },
+    {
+      "id": "train-a-4-d0",
+      "role": "train",
+      "alpha_deg": -4,
+      "delta_deg": 0,
+      "cl": -0.16,
+      "cd": 0.009,
+      "cm": -0.062,
+      "pixels": {
+        "lift": [
+          824,
+          1551
+        ],
+        "drag": [
+          955,
+          2532
+        ],
+        "moment": [
+          1616,
+          1101
+        ]
+      }
+    },
+    {
+      "id": "train-a4-d0",
+      "role": "train",
+      "alpha_deg": 4,
+      "delta_deg": 0,
+      "cl": 0.68,
+      "cd": 0.014,
+      "cm": -0.069,
+      "pixels": {
+        "lift": [
+          1224,
+          1130
+        ],
+        "drag": [
+          1375,
+          2503
+        ],
+        "moment": [
+          2036,
+          1117
+        ]
+      }
+    },
+    {
+      "id": "train-a-4-d20",
+      "role": "train",
+      "alpha_deg": -4,
+      "delta_deg": 20,
+      "cl": 0.52,
+      "cd": 0.041,
+      "cm": -0.197,
+      "pixels": {
+        "lift": [
+          824,
+          1210
+        ],
+        "drag": [
+          1295,
+          2370
+        ],
+        "moment": [
+          1956,
+          1373
+        ]
+      }
+    },
+    {
+      "id": "train-a4-d20",
+      "role": "train",
+      "alpha_deg": 4,
+      "delta_deg": 20,
+      "cl": 1.27,
+      "cd": 0.047,
+      "cm": -0.19,
+      "pixels": {
+        "lift": [
+          1224,
+          835
+        ],
+        "drag": [
+          1670,
+          2335
+        ],
+        "moment": [
+          2331,
+          1359
+        ]
+      }
+    },
+    {
+      "id": "heldout-a-4-d-10",
+      "role": "heldout",
+      "alpha_deg": -4,
+      "delta_deg": -10,
+      "cl": -0.6,
+      "cd": 0.005,
+      "cm": 0.024,
+      "pixels": {
+        "lift": [
+          824,
+          1770
+        ],
+        "drag": [
+          735,
+          2554
+        ],
+        "moment": [
+          1396,
+          931
+        ]
+      }
+    },
+    {
+      "id": "heldout-a0-d-10",
+      "role": "heldout",
+      "alpha_deg": 0,
+      "delta_deg": -10,
+      "cl": -0.21,
+      "cd": 0.008,
+      "cm": 0.027,
+      "pixels": {
+        "lift": [
+          1024,
+          1573
+        ],
+        "drag": [
+          930,
+          2535
+        ],
+        "moment": [
+          1591,
+          923
+        ]
+      }
+    },
+    {
+      "id": "heldout-a4-d-10",
+      "role": "heldout",
+      "alpha_deg": 4,
+      "delta_deg": -10,
+      "cl": 0.21,
+      "cd": 0.01,
+      "cm": 0.024,
+      "pixels": {
+        "lift": [
+          1224,
+          1367
+        ],
+        "drag": [
+          1140,
+          2525
+        ],
+        "moment": [
+          1801,
+          930
+        ]
+      }
+    },
+    {
+      "id": "heldout-a-4-d10",
+      "role": "heldout",
+      "alpha_deg": -4,
+      "delta_deg": 10,
+      "cl": 0.25,
+      "cd": 0.021,
+      "cm": -0.141,
+      "pixels": {
+        "lift": [
+          824,
+          1346
+        ],
+        "drag": [
+          1160,
+          2470
+        ],
+        "moment": [
+          1821,
+          1259
+        ]
+      }
+    },
+    {
+      "id": "heldout-a0-d10",
+      "role": "heldout",
+      "alpha_deg": 0,
+      "delta_deg": 10,
+      "cl": 0.65,
+      "cd": 0.025,
+      "cm": -0.142,
+      "pixels": {
+        "lift": [
+          1024,
+          1144
+        ],
+        "drag": [
+          1360,
+          2449
+        ],
+        "moment": [
+          2021,
+          1261
+        ]
+      }
+    },
+    {
+      "id": "heldout-a4-d10",
+      "role": "heldout",
+      "alpha_deg": 4,
+      "delta_deg": 10,
+      "cl": 1.04,
+      "cd": 0.029,
+      "cm": -0.137,
+      "pixels": {
+        "lift": [
+          1224,
+          948
+        ],
+        "drag": [
+          1555,
+          2423
+        ],
+        "moment": [
+          2216,
+          1251
+        ]
+      }
+    }
+  ],
+  "not_a_runtime_airframe": true,
+  "physical_aircraft_calibration_performed": false,
+  "limits": [
+    "Only the selected low-angle fixed-Mach window; no stall, dynamic/control-rate or cross-Mach/Re claim.",
+    "The whole-section source table is replayed on a unit-area/chord force-kernel fixture, not attached to trailing-wing cells or a WWII airframe.",
+    "Native static control chain reaches each selected signed angle; real section geometry, quarter-chord-to-CG transfer, finite span and damaged-aircraft behavior are not validated by this replay.",
+    "CM comparison is conditional on the explicitly inferred conventional source sign; coefficient agreement cannot independently confirm that convention."
+  ]
+}

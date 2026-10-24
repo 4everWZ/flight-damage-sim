@@ -1,0 +1,186 @@
+{
+  "name": "naca0009-preselected-denser-fixed-linkage-slice",
+  "evidence_kind": "measurement",
+  "conditions_inherited_from": "control-polar-naca0009-measured-subset.json",
+  "preselection": "Recorded before further transcription in d2bdb61 and the canonical plan. Frozen five-point data and its failed four-corner result remain unchanged.",
+  "preselected_training_additions": [
+    [
+      -4,
+      5
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      -4,
+      20
+    ],
+    [
+      4,
+      20
+    ]
+  ],
+  "preselected_heldout_additions": [
+    [
+      0,
+      15
+    ]
+  ],
+  "source_convention_review": {
+    "source_ci_run": 39411364454,
+    "symbols_pdf5": "CM is section moment about quarter chord; delta1 relative to airfoil, delta2 relative to forward flap.",
+    "geometry_pdf20": "Positive depicted flap deflections are trailing-edge down; c1=.20c, c2=.15c. The slice retains nominal delta2=delta1, both gaps sealed.",
+    "precision_pdf7": "Effective-alpha error at zero lift about +/-.3 deg, not a bound over all alpha; each hinge setting +/-.2 deg. Only lift tunnel-corrected; absolute drag corrections unknown.",
+    "conditions_pdf4": "15 psf, about 76 mph, effective Re 2760000, turbulence factor 1.93. No source Mach or temperature established.",
+    "native_cm_vector_sign": "Mapped through L-290 reference 7, NACA721 PDF27: positive pitching M is Z toward X. With native FRD axes this is +Y, nose up. For a matched horizontal section about the same quarter-chord point, CM_native = CM_report; no sign flip.",
+    "native_cm_multiplier_horizontal": 1,
+    "native_cm_definition_source": "https://ntrs.nasa.gov/api/citations/19930091799/downloads/19930091799.pdf#page=27",
+    "remaining_mach_gap": "L-290 does not establish source Mach or case-linked static thermodynamic state. NACA387's atmospheric differential manometer and generic standard-air example do not provide this 1943 run's absolute pressure/temperature. No Mach is adopted."
+  },
+  "reading_allowance_note": "New congested-curve manual reading allowances CL +/-.04, CD +/-.003, CM +/-.007. Retained separately from frozen smaller allowances and source/systematic uncertainty; not a physical acceptance tolerance.",
+  "rows": [
+    {
+      "id": "train-a-4-d5",
+      "role": "train",
+      "alpha_deg": -4,
+      "delta_deg": 5,
+      "cl": 0.09,
+      "cd": 0.014,
+      "cm": -0.105,
+      "pixels": {
+        "lift": [
+          990,
+          1480
+        ],
+        "drag": [
+          990,
+          1203
+        ],
+        "moment": [
+          990,
+          486
+        ]
+      },
+      "reading_halfwidth": {
+        "cl": 0.04,
+        "cd": 0.003,
+        "cm": 0.007
+      }
+    },
+    {
+      "id": "train-a4-d5",
+      "role": "train",
+      "alpha_deg": 4,
+      "delta_deg": 5,
+      "cl": 0.83,
+      "cd": 0.025,
+      "cm": -0.088,
+      "pixels": {
+        "lift": [
+          1235,
+          1350
+        ],
+        "drag": [
+          1235,
+          1168
+        ],
+        "moment": [
+          1235,
+          461
+        ]
+      },
+      "reading_halfwidth": {
+        "cl": 0.04,
+        "cd": 0.003,
+        "cm": 0.007
+      }
+    },
+    {
+      "id": "train-a-4-d20",
+      "role": "train",
+      "alpha_deg": -4,
+      "delta_deg": 20,
+      "cl": 0.67,
+      "cd": 0.054,
+      "cm": -0.203,
+      "pixels": {
+        "lift": [
+          1180,
+          1484
+        ],
+        "drag": [
+          1180,
+          1072
+        ],
+        "moment": [
+          1180,
+          652
+        ]
+      },
+      "reading_halfwidth": {
+        "cl": 0.04,
+        "cd": 0.003,
+        "cm": 0.007
+      }
+    },
+    {
+      "id": "train-a4-d20",
+      "role": "train",
+      "alpha_deg": 4,
+      "delta_deg": 20,
+      "cl": 1.26,
+      "cd": 0.076,
+      "cm": -0.165,
+      "pixels": {
+        "lift": [
+          1376,
+          1354
+        ],
+        "drag": [
+          1376,
+          1002
+        ],
+        "moment": [
+          1376,
+          591
+        ]
+      },
+      "reading_halfwidth": {
+        "cl": 0.04,
+        "cd": 0.003,
+        "cm": 0.007
+      }
+    },
+    {
+      "id": "hold-a0-d15",
+      "role": "heldout",
+      "alpha_deg": 0,
+      "delta_deg": 15,
+      "cl": 0.87,
+      "cd": 0.049,
+      "cm": -0.174,
+      "pixels": {
+        "lift": [
+          1247,
+          1418
+        ],
+        "drag": [
+          1247,
+          1091
+        ],
+        "moment": [
+          1247,
+          605
+        ]
+      },
+      "reading_halfwidth": {
+        "cl": 0.04,
+        "cd": 0.003,
+        "cm": 0.007
+      }
+    }
+  ],
+  "not_a_runtime_airframe": true,
+  "physical_calibration_performed": false
+}

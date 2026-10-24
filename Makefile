@@ -17,6 +17,7 @@ ifneq ($(BUILD_CONFIG_CHANGED),)
 endif
 
 .PHONY: all test clean
+all: build/control-polar-tests
 all: build/glide-trim-tests
 all: build/cell-frame-tests
 all: build/surface-sampling-tests build/sensor-history-probe build/aerodynamics-tests build/sensitivity-probe build/flight-run build/flight-live build/core-tests build/mechanics-review build/propulsion-probe build/propeller-tests build/governor-probe build/detachment-tests build/material-tests build/control-tests build/control-probe build/lagged-control-tests
@@ -113,8 +114,15 @@ build/glide-probe: $(CORE_DEPS) tests/glide_probe.cpp include/flight/core.hpp in
 build/trim-stall-probe: $(CORE_DEPS) tests/trim_stall_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/trim_stall_probe.cpp -o $@
 
+build/control-polar-tests: $(CORE_DEPS) tests/control_polar_tests.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/control_polar_tests.cpp -o $@
+
+build/control-polar-reference-probe: $(CORE_DEPS) tests/control_polar_reference_probe.cpp include/flight/core.hpp include/flight/math.hpp | build
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(CORE_OBJECTS) tests/control_polar_reference_probe.cpp -o $@
+
 test: all
 	mkdir -p results
+	./build/control-polar-tests data/validation-material.airframe results/control-polar-summary.json
 	./build/glide-trim-tests data/validation-material.airframe results/glide-trim-summary.json
 	./build/surface-sampling-tests data/validation-material.airframe
 	./build/aerodynamics-tests data/validation-material.airframe

@@ -78,6 +78,37 @@ CurvePoint lookup(const Definition &d, const AeroCell &c, double alpha) {
   return {alpha, lo->cl + w * (upper->cl - lo->cl),
           lo->cd + w * (upper->cd - lo->cd), lo->cm + w * (upper->cm - lo->cm)};
 }
+CurvePoint control_lookup(const Definition &d, const AeroCell &c, double alpha,
+                          double delta, bool &clamped) {
+  const auto it = std::find_if(d.control_polars.begin(), d.control_polars.end(),
+                               [&](const auto &p) { return p.name == c.control_polar; });
+  if (it == d.control_polars.end() || it->slices.size() < 2)
+    throw std::runtime_error("unknown/invalid control polar: " + c.control_polar);
+  const auto &rows = it->slices;
+  double a = clamp(alpha, rows.front().points.front().alpha,
+                         rows.front().points.back().alpha);
+  double angle = clamp(delta, rows.front().delta, rows.back().delta);
+  clamped = a != alpha || angle != delta;
+  auto sample = [&](const ControlPolarSlice &row) {
+    auto upper = std::upper_bound(row.points.begin(), row.points.end(), a,
+        [](double x, const CurvePoint &p) { return x < p.alpha; });
+    if (upper == row.points.end()) return row.points.back();
+    if (upper == row.points.begin()) return row.points.front();
+    const auto &lo = *(upper-1);
+    double w = (a-lo.alpha)/(upper->alpha-lo.alpha);
+    return CurvePoint{a, lo.cl+w*(upper->cl-lo.cl),
+                        lo.cd+w*(upper->cd-lo.cd), lo.cm+w*(upper->cm-lo.cm)};
+  };
+  auto upper = std::upper_bound(rows.begin(), rows.end(), angle,
+      [](double x, const ControlPolarSlice &p) { return x < p.delta; });
+  if (upper == rows.end()) return sample(rows.back());
+  if (upper == rows.begin()) return sample(rows.front());
+  const auto &lo = *(upper-1);
+  auto low = sample(lo), high = sample(*upper);
+  double w = (angle-lo.delta)/(upper->delta-lo.delta);
+  return {a, low.cl+w*(high.cl-low.cl), low.cd+w*(high.cd-low.cd),
+             low.cm+w*(high.cm-low.cm)};
+}
 Quat cell_frame(const Definition &def, const AeroCell &c) {
   Quat incidence = c.plane == 0 ? Quat::axis({0, 1, 0}, c.incidence)
                                 : Quat::axis({0, 0, 1}, -c.incidence);
@@ -98,7 +129,9 @@ Wrench cell_load(const Definition &def, AeroCell &c, Vec local, Vec r,
   Vec normal = frame.rotate(c.plane == 0 ? Vec{0, 0, 1} : Vec{0, 1, 0});
   double raw_alpha = std::atan2(dot(local, normal), dot(local, chord));
   double alpha = raw_alpha + c.control_gain * deflection;
-  auto coeff = lookup(def, c, alpha);
+  bool clamped = false;
+  auto coeff = c.control_polar.empty() ? lookup(def, c, alpha)
+      : control_lookup(def, c, raw_alpha, deflection, clamped);
   double mach = speed / 340.;
   double compression = 1. / std::sqrt(std::max(1 - mach * mach, .35));
   double effective_area = c.area * c.area_fraction;
@@ -121,6 +154,8 @@ Wrench cell_load(const Definition &def, AeroCell &c, Vec local, Vec r,
     c.force = force;
     c.moment = moment;
     c.deflection = deflection;
+    c.flow_alpha = raw_alpha;
+    c.control_polar_clamped = clamped;
   }
   return result;
 }
@@ -201,6 +236,7 @@ Quat orientation(double alpha) { return Quat::axis({0, 1, 0}, alpha); }
 Definition Definition::load(const std::string &path) {
   Definition d;
   std::vector<std::pair<int, Quat>> cell_bases;
+  std::vector<std::pair<int, std::string>> cell_control_polars;
   std::ifstream file(path);
   if (!file)
     throw std::runtime_error("cannot read airframe: " + path);
@@ -268,6 +304,32 @@ Definition Definition::load(const std::string &path) {
                       [&](const auto &b) { return b.first == id; }))
         throw std::runtime_error("duplicate cell basis");
       cell_bases.push_back({id, basis});
+    } else if (tag == "cell_control_polar") {
+      int id; std::string name;
+      if (!(s >> id >> name))
+        throw std::runtime_error("malformed cell_control_polar row " + std::to_string(line_no));
+      if (std::any_of(cell_control_polars.begin(), cell_control_polars.end(),
+                       [&](const auto &p) { return p.first == id; }))
+        throw std::runtime_error("duplicate cell control polar");
+      cell_control_polars.push_back({id, name});
+    } else if (tag == "control_polar") {
+      std::string name; double alpha, delta; CurvePoint point;
+      if (!(s >> name >> alpha >> delta >> point.cl >> point.cd >> point.cm) ||
+          !std::isfinite(alpha) || !std::isfinite(delta) || !std::isfinite(point.cl) ||
+          !std::isfinite(point.cd) || !std::isfinite(point.cm) || point.cd < 0)
+        throw std::runtime_error("invalid control_polar row " + std::to_string(line_no));
+      point.alpha = rad(alpha); delta = rad(delta);
+      auto table = std::find_if(d.control_polars.begin(), d.control_polars.end(),
+                                 [&](const auto &p) { return p.name == name; });
+      if (table == d.control_polars.end()) {
+        d.control_polars.push_back({name, {}}); table = d.control_polars.end()-1;
+      }
+      auto row = std::find_if(table->slices.begin(), table->slices.end(),
+                               [&](const auto &p) { return p.delta == delta; });
+      if (row == table->slices.end()) {
+        table->slices.push_back({delta, {}}); row = table->slices.end()-1;
+      }
+      row->points.push_back(point);
     } else if (tag == "curve") {
       std::string name;
       CurvePoint p;
@@ -402,6 +464,32 @@ Definition Definition::load(const std::string &path) {
       if (tab.second[i].alpha <= tab.second[i - 1].alpha)
         throw std::runtime_error("unsorted aero curve");
   }
+  for (auto &table : d.control_polars) {
+    auto &rows = table.slices;
+    std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.delta < b.delta; });
+    if (rows.size() < 2) throw std::runtime_error("control polar needs 2+ delta slices");
+    for (auto &row : rows) {
+      auto &points = row.points;
+      std::sort(points.begin(), points.end(), [](const auto &a, const auto &b) { return a.alpha < b.alpha; });
+      if (points.size() < 2) throw std::runtime_error("control polar needs 2+ alpha stations");
+      for (std::size_t j=1; j<points.size(); ++j)
+        if (points[j].alpha <= points[j-1].alpha)
+          throw std::runtime_error("duplicate control polar point");
+      if (points.size() != rows.front().points.size())
+        throw std::runtime_error("control polar grid must be rectangular");
+      for (std::size_t j=0; j<points.size(); ++j)
+        if (points[j].alpha != rows.front().points[j].alpha)
+          throw std::runtime_error("control polar alpha grids differ");
+    }
+  }
+  for (const auto &[id, name] : cell_control_polars) {
+    auto cell = std::find_if(d.cells.begin(), d.cells.end(), [&](const auto &c) { return c.id == id; });
+    if (cell == d.cells.end() || cell->chain < 0)
+      throw std::runtime_error("control polar binding needs a known controlled cell");
+    if (std::none_of(d.control_polars.begin(), d.control_polars.end(), [&](const auto &p) { return p.name == name; }))
+      throw std::runtime_error("control polar binding references unknown table");
+    cell->control_polar = name;
+  }
   if (reachable(d, 0).size() != d.nodes.size())
     throw std::runtime_error("initial structure disconnected");
   for (auto &c : d.cells)
@@ -531,7 +619,10 @@ void Simulation::update_controls(const PilotIntent &p) {
     for (std::size_t id = 0; id < def.chains.size(); ++id) {
       const auto &chain = def.chains[id];
       if (chain.axis == axis && chain.connected && !chain.jammed &&
-          chain.range > 0 && chain.hinge > 0) {
+          chain.range > 0 && chain.hinge > 0 && chain.slew > 0) {
+        // A runtime-immobilized chain cannot respond to any new PI request.
+        // Keep the same exact zero boundary as advance_surface; this is not
+        // an aerodynamic authority estimate or a practical rate threshold.
         for (const auto &cell : def.cells)
           if (cell.chain == int(id) && cell.attached && cell.area_fraction > 0)
             available = true;

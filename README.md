@@ -16,6 +16,10 @@ Requires C++20 GCC, GNU make and Python 3:
 python3 tools/experiments.py
 python3 tools/instructor_experiments.py
 python3 tools/aim_tracking_experiments.py  # moving-heading feedforward, dynamic simulated flight and sampled input
+python3 tools/control_polar_calibration.py  # fixed-condition preparation; published program-output replay and separate synthetic 2D checks
+python3 tools/control_polar_measured_subset.py  # measured curve holdout in coefficient space; unknown Mach blocks runtime export
+python3 tools/control_polar_dense_slice.py  # preselected denser stations; preserves old failure and unseen-delta holdout
+python3 tools/control_polar_experiments.py  # optional 2D component coefficients, baseline identity and actual damage/control paths
 python3 tools/trim_stall_diagnostics.py  # independent table/roll checks, pitch envelope and dynamic simulated flights
 python3 tools/glide_experiments.py  # fixed-throttle glide equilibrium, dynamic simulated damaged transients and separate static-flow diagnostics
 python3 tools/cell_frame_experiments.py  # opt-in cell bases, identity compatibility and synthetic canted-cell flights
@@ -67,6 +71,10 @@ The default is the signed prop variant; use `--airframe validation.airframe` for
 `PilotIntent` carries a world aim direction, normalized roll/pitch/yaw requests, one active flag per axis, throttle, available trim and requested prop RPM ratio. `Simulation::step` advances one fixed tick. Per-cell loads remain available before reduction to a `Wrench`; `integrate_body` is the rigid force/moment boundary, and `integrate_rotor_body` jointly integrates the free body and internal spinning shaft. SI units and frame conventions are documented in current decisions and the core header.
 
 `Simulation::trim_fixed_throttle(TAS, altitude, throttle, prop_rpm_ratio=1)` initializes a force/moment/rotor-balanced air-relative climb or glide while keeping throttle prescribed. Check `converged` and the reported force/moment/rotor/governor residuals before using the entry. Flight-path angle is positive for climb; subsequent ticks integrate freely. This uses the existing synthetic shaft/friction and propeller model, without a calibrated historical idle condition. The legacy `trim(speed, altitude)` remains available. See [evidence and bounds](docs/decisions/current-decisions.md#fixed-throttle-trim-and-glide-controlload-evidence).
+
+Optional control-surface coefficients use `control_polar NAME alpha_deg delta_deg CL CD CM` records on a rectangular grid and `cell_control_polar CELL_ID NAME` to bind a controlled cell. Merely declaring a table leaves the legacy model active; existing data files are unchanged. Each axis needs at least two stations; records may be unordered, while duplicate/missing grid points, invalid bindings, non-finite values and negative CD are rejected. Out-of-domain coordinates clamp to the table boundary and are reported rather than extrapolated.
+
+The optional law samples local **flow** angle and the actual chain endpoint/midpoint angle multiplied by existing hinge effectiveness and cell sign. It does not apply `control_gain` again. Forces, moments, area/skin damage, structural loading and detached control mechanics retain their existing paths. Legacy `alpha` and the fixed-15-degree `stall` field remain diagnostic proxies; bound cells additionally expose `flow_alpha`, `delta_eff`, `control_polar_clamped` and a proxy label in live JSON. These static effective-component tables add neither downwash nor dynamic stall and are not historical sectional data. See [contract and measured limits](docs/decisions/current-decisions.md#optional-two-dimensional-control-polar).
 
 `build/flight-live data/validation-bem.airframe` provides a line-oriented local transport. It emits an initial JSON snapshot, then one snapshot per command:
 
